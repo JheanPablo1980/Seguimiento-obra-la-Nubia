@@ -574,7 +574,7 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
         {/* Global KPI Summary Bar */}
         <div className="p-3 bg-slate-950/90 border-b border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs shrink-0">
           <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 flex flex-col justify-between">
-            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Total Pendiente / Meta</span>
+            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Pendiente Total / Meta</span>
             <span className="text-lg font-black text-amber-400 font-mono mt-0.5">{totals.totalTarget.toLocaleString()} <span className="text-[10px] text-slate-400 font-sans">unidades/mts</span></span>
           </div>
           <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 flex flex-col justify-between">
@@ -582,12 +582,12 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
             <span className="text-lg font-black text-emerald-400 font-mono mt-0.5">{totals.totalExecuted.toLocaleString()} <span className="text-[10px] text-emerald-500/80 font-sans">({totals.globalPct}%)</span></span>
           </div>
           <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 flex flex-col justify-between">
-            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Meta Entrega 1 (Jul 2026)</span>
-            <span className="text-lg font-black text-sky-400 font-mono mt-0.5">{totals.totalEntrega1.toLocaleString()} <span className="text-[10px] text-sky-400/80 font-sans">({totals.entrega1Pct}%)</span></span>
+            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Rubros Registrados</span>
+            <span className="text-lg font-black text-sky-400 font-mono mt-0.5">{scheduleItems.length} <span className="text-[10px] text-slate-400 font-sans">actividades</span></span>
           </div>
           <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 flex flex-col justify-between">
-            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Meta Entrega 2 (Ago 2026)</span>
-            <span className="text-lg font-black text-indigo-400 font-mono mt-0.5">{totals.totalEntrega2.toLocaleString()} <span className="text-[10px] text-slate-400 font-sans">unidades</span></span>
+            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Elementos Vinculados</span>
+            <span className="text-lg font-black text-indigo-400 font-mono mt-0.5">{elements.filter(e => e.scheduleItemId).length} <span className="text-[10px] text-slate-400 font-sans">/ {elements.length} en bitácora</span></span>
           </div>
         </div>
 
@@ -692,26 +692,24 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                 </span>
               </div>
 
-              {/* Main Schedule Matrix Table (Format requested by user) */}
+              {/* Main Schedule Matrix Table */}
               <div className="border border-slate-800 rounded-xl overflow-x-auto shadow-md bg-slate-950/60">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-900 border-b border-slate-800 text-slate-300 font-bold">
                       <th className="p-3 border-r border-slate-800">Código</th>
                       <th className="p-3 border-r border-slate-800 min-w-[200px]">Descripción</th>
-                      <th className="p-3 border-r border-slate-800 text-right">Pendiente Total (Meta)</th>
-                      <th className="p-3 border-r border-slate-800 text-center bg-sky-950/40 text-sky-200">Entrega 1 - Últ. semana Jul 2026</th>
-                      <th className="p-3 border-r border-slate-800 text-center bg-indigo-950/40 text-indigo-200">Entrega 2 - Agosto 2026</th>
+                      <th className="p-3 border-r border-slate-800 text-right bg-amber-950/30 text-amber-200">Pendiente Total (Meta Editables)</th>
                       <th className="p-3 border-r border-slate-800 text-center">Fecha Límite</th>
                       <th className="p-3 border-r border-slate-800 text-right bg-emerald-950/40 text-emerald-200">Avance Real Ejecutado</th>
-                      <th className="p-3 text-center min-w-[120px]">Estado / Cumplimiento</th>
+                      <th className="p-3 border-r border-slate-800 text-center min-w-[120px]">Estado / Cumplimiento</th>
+                      <th className="p-3 text-center min-w-[80px]">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/80">
                     {filteredItems.map(item => {
                       const prog = progressMap[item.id] || { executed: 0, inProgress: 0, pending: 0, count: 0, completionPercent: 0 };
                       const pctGlobal = Math.round((prog.completionPercent || 0) * 100) / 100;
-                      const pctE1 = item.entrega1Target > 0 ? Math.round((prog.executed / item.entrega1Target) * 100) : 0;
 
                       return (
                         <tr key={item.id} className="hover:bg-slate-800/50 transition">
@@ -724,14 +722,23 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                               {prog.count} elemento(s) de bitácora vinculados
                             </span>
                           </td>
-                          <td className="p-3 border-r border-slate-800/80 text-right font-mono font-bold text-white">
-                            {item.targetQuantity} <span className="text-[10px] font-normal text-slate-400">{item.unit}</span>
-                          </td>
-                          <td className="p-3 border-r border-slate-800/80 text-center font-mono font-medium bg-sky-950/20 text-sky-300">
-                            {item.entrega1Target} <span className="text-[10px] text-slate-400">({item.targetQuantity > 0 ? Math.round((item.entrega1Target / item.targetQuantity) * 100) : 0}%)</span>
-                          </td>
-                          <td className="p-3 border-r border-slate-800/80 text-center font-mono font-medium bg-indigo-950/20 text-indigo-300">
-                            {item.entrega2Target} <span className="text-[10px] text-slate-400">({item.targetQuantity > 0 ? Math.round((item.entrega2Target / item.targetQuantity) * 100) : 0}%)</span>
+                          {/* Editable Pendiente Total Column */}
+                          <td className="p-2 border-r border-slate-800/80 text-right bg-amber-950/10">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={item.targetQuantity}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value) || 0;
+                                  onUpdateScheduleItems(scheduleItems.map(i => i.id === item.id ? { ...i, targetQuantity: val } : i));
+                                }}
+                                className="w-24 bg-slate-900 border border-amber-500/50 hover:border-amber-400 focus:border-amber-400 rounded px-2 py-1 text-right text-xs font-mono font-bold text-amber-300 focus:outline-none focus:ring-1 focus:ring-amber-400 transition"
+                                title="Haz clic para modificar directamente la meta / pendiente total"
+                              />
+                              <span className="text-[10px] font-normal text-slate-400 shrink-0 w-8 text-left">{item.unit}</span>
+                            </div>
                           </td>
                           <td className="p-3 border-r border-slate-800/80 text-center text-slate-300 font-mono text-[11px]">
                             {item.finalDeadline || '01/08/2026'}
@@ -739,16 +746,16 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                           <td className="p-3 border-r border-slate-800/80 text-right font-mono font-bold text-emerald-400 bg-emerald-950/20">
                             {prog.executed} {item.unit} <span className="block text-[10px] font-sans font-semibold text-emerald-300">({pctGlobal}%)</span>
                           </td>
-                          <td className="p-3 text-center">
+                          <td className="p-3 border-r border-slate-800/80 text-center">
                             <div className="flex flex-col items-center gap-1">
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                                 pctGlobal >= 100
                                   ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                                  : pctE1 >= 100
+                                  : pctGlobal > 0
                                   ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
                                   : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                               }`}>
-                                {pctGlobal >= 100 ? 'Cumplido Total' : pctE1 >= 100 ? 'Entrega 1 OK' : 'En Proceso'}
+                                {pctGlobal >= 100 ? 'Cumplido Total' : pctGlobal > 0 ? 'En Proceso' : 'Pendiente'}
                               </span>
                               {/* Small Progress Bar */}
                               <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
@@ -757,6 +764,25 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                                   style={{ width: `${Math.min(100, pctGlobal)}%` }}
                                 />
                               </div>
+                            </div>
+                          </td>
+                          {/* Actions Column with Trash Icon and Edit Icon */}
+                          <td className="p-2 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={() => handleEdit(item)}
+                                className="p-1.5 bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white rounded-lg transition"
+                                title="Editar detalles del rubro"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(item.id)}
+                                className="p-1.5 bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 rounded-lg transition shadow-xs"
+                                title="Eliminar este registro del cronograma"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -768,19 +794,14 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                       <td colSpan={2} className="p-3 border-r border-slate-800 text-right uppercase text-[11px] tracking-wider">
                         Total Unidades / Metros
                       </td>
-                      <td className="p-3 border-r border-slate-800 text-right font-mono text-amber-300 text-sm">
+                      <td className="p-3 border-r border-slate-800 text-right font-mono text-amber-300 text-sm bg-amber-950/20">
                         {totals.totalTarget}
-                      </td>
-                      <td className="p-3 border-r border-slate-800 text-center font-mono text-sky-300 text-sm">
-                        {totals.totalEntrega1}
-                      </td>
-                      <td className="p-3 border-r border-slate-800 text-center font-mono text-indigo-300 text-sm">
-                        {totals.totalEntrega2}
                       </td>
                       <td className="p-3 border-r border-slate-800"></td>
                       <td className="p-3 border-r border-slate-800 text-right font-mono text-emerald-400 text-sm">
                         {totals.totalExecuted} ({totals.globalPct}%)
                       </td>
+                      <td className="p-3 border-r border-slate-800"></td>
                       <td className="p-3"></td>
                     </tr>
                   </tfoot>
@@ -1009,30 +1030,6 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                   </div>
 
                   <div className="pt-2 border-t border-slate-800 space-y-2">
-                    <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider block">Metas por Entrega Programada</span>
-                    
-                    <div>
-                      <label className="text-[10px] text-slate-400 block mb-1">Entrega 1 (Julio 2026):</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={entrega1Target}
-                        onChange={(e) => setEntrega1Target(Number(e.target.value))}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-sky-300 font-mono"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] text-slate-400 block mb-1">Entrega 2 (Agosto 2026):</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={entrega2Target}
-                        onChange={(e) => setEntrega2Target(Number(e.target.value))}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-indigo-300 font-mono"
-                      />
-                    </div>
-
                     <div>
                       <label className="text-[10px] text-slate-400 block mb-1">Fecha Límite Final:</label>
                       <input
@@ -1040,7 +1037,7 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                         value={finalDeadline}
                         onChange={(e) => setFinalDeadline(e.target.value)}
                         placeholder="01/08/2026"
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
                       />
                     </div>
                   </div>
@@ -1081,7 +1078,7 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                           <span className="font-bold text-xs text-white">{item.description}</span>
                         </div>
                         <p className="text-[11px] text-slate-400">
-                          Meta Total: <strong className="text-emerald-400 font-mono">{item.targetQuantity} {item.unit}</strong> | Entrega 1: <span className="text-sky-300">{item.entrega1Target}</span> | Entrega 2: <span className="text-indigo-300">{item.entrega2Target}</span> | Límite: {item.finalDeadline}
+                          Meta Total (Pendiente): <strong className="text-emerald-400 font-mono">{item.targetQuantity} {item.unit}</strong> | Límite: {item.finalDeadline || '01/08/2026'}
                         </p>
                       </div>
 
@@ -1095,7 +1092,7 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                         </button>
                         <button
                           onClick={() => handleDelete(item.id)}
-                          className="p-1.5 bg-slate-800 hover:bg-rose-600 text-slate-300 hover:text-white rounded-lg transition"
+                          className="p-1.5 bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 rounded-lg transition"
                           title="Eliminar rubro"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
