@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { InspectionElement, FilterState, StatusType, CameraNorm, GlobalConfig, ContractualItem } from '../types';
+import { DEFAULT_CONTRACTUAL_ITEMS } from '../data/sampleData';
 import { formatExecutionTime } from '../utils/timeUtils';
 import { adjustTramoMeters } from '../utils/tramoUtils';
 import { normalizeActa, getAvailableActas } from '../utils/actaUtils';
@@ -13,7 +14,9 @@ import {
   Ruler, 
   Search, 
   Activity,
-  Camera
+  Camera,
+  LayoutGrid,
+  Table
 } from 'lucide-react';
 
 interface BitacoraTableProps {
@@ -29,6 +32,7 @@ interface BitacoraTableProps {
   onInspectElement: (element: InspectionElement) => void;
   getAreaNameForElement: (element: InspectionElement) => string;
   globalConfig?: GlobalConfig;
+  appMode?: 'admin' | 'field';
 }
 
 export const BitacoraTable: React.FC<BitacoraTableProps> = ({
@@ -43,20 +47,29 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
   onAddCamera,
   onInspectElement,
   getAreaNameForElement,
-  globalConfig
+  globalConfig,
+  appMode = 'admin'
 }) => {
   const [contractItems, setContractItems] = useState<ContractualItem[]>([]);
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>(() => 
+    typeof window !== 'undefined' && window.innerWidth < 768 ? 'cards' : 'table'
+  );
 
   useEffect(() => {
     const loadItems = () => {
       const saved = localStorage.getItem('obra_contract_items_v1');
       if (saved) {
         try {
-          setContractItems(JSON.parse(saved));
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setContractItems(parsed);
+            return;
+          }
         } catch (e) {
           console.error(e);
         }
       }
+      setContractItems(DEFAULT_CONTRACTUAL_ITEMS);
     };
     
     loadItems();
@@ -117,7 +130,7 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
           <p className="text-xs text-slate-400">Listado de cámaras y tramos canalizados</p>
         </div>
         <div className="flex items-center gap-1.5">
-          {elements.length > 0 && onDeleteAllElements && (
+          {appMode === 'admin' && elements.length > 0 && onDeleteAllElements && (
             <button
               onClick={onDeleteAllElements}
               className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition"
@@ -207,19 +220,238 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
               <option key={actaName} value={actaName}>{actaName}</option>
             ))}
           </select>
+
+          {/* View Mode Toggle (Fichas Móviles vs Tabla Escrito) */}
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0">
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              className={`px-2 py-1 rounded text-xs font-bold flex items-center gap-1 transition ${
+                viewMode === 'cards' ? 'bg-sky-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Vista de Fichas de Inspección Móvil"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Fichas</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`px-2 py-1 rounded text-xs font-bold flex items-center gap-1 transition ${
+                viewMode === 'table' ? 'bg-sky-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Vista de Tabla Completa"
+            >
+              <Table className="w-3.5 h-3.5" />
+              <span>Tabla</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Table Container */}
-      <div className="overflow-x-auto responsive-table max-h-[500px]">
-        <table className="w-full text-left border-collapse text-sm">
+      {/* Cards View (Fichas Móviles) */}
+      {viewMode === 'cards' ? (
+        <div className="space-y-3 max-h-[550px] overflow-y-auto pr-1">
+          {filteredElements.length === 0 ? (
+            <div className="py-8 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200 p-4">
+              <ClipboardList className="w-8 h-8 text-slate-300 mx-auto mb-1" />
+              <p className="font-bold text-slate-600">No hay elementos en esta categoría</p>
+              <p className="text-[11px] text-slate-400">Dibuja un tramo o agrega una cámara en el plano para inspeccionar.</p>
+            </div>
+          ) : (
+            filteredElements.map((el) => {
+              const sectorName = getAreaNameForElement ? getAreaNameForElement(el) : null;
+              return (
+                <div key={el.id} className="bg-white border border-slate-200 hover:border-sky-300 rounded-xl p-3 shadow-xs space-y-2.5 transition">
+                  {/* Header Row: Label & Status Buttons */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-2">
+                      {el.type === 'camera' ? (
+                        <span className="p-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 font-extrabold text-xs flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-rose-600" />
+                          <span>{el.label}</span>
+                        </span>
+                      ) : (
+                        <span className="p-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 font-extrabold text-xs flex items-center gap-1">
+                          <Ruler className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>{el.label}</span>
+                        </span>
+                      )}
+                      {sectorName && (
+                        <span className="text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full">
+                          {sectorName}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Quick 3-State Buttons */}
+                    <div className="flex items-center gap-1">
+                      {(['Pendiente', 'En proceso', 'Terminado'] as StatusType[]).map((st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => {
+                            let newPercent = el.progressPercent;
+                            if (st === 'En proceso' && (!newPercent || newPercent === 0)) newPercent = 50;
+                            if (st === 'Terminado') newPercent = 100;
+                            if (st === 'Pendiente') newPercent = 0;
+                            onUpdateElement({ ...el, status: st, progressPercent: newPercent });
+                          }}
+                          className={`px-2 py-1 rounded text-[10px] font-extrabold border transition cursor-pointer ${
+                            el.status === st
+                              ? getStatusBadgeClass(st) + ' shadow-2xs scale-105'
+                              : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {st === 'Pendiente' ? '⏳ Pend.' : st === 'En proceso' ? '⚙️ Proceso' : '✅ Listo'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Progress bar if En proceso */}
+                  {el.status === 'En proceso' && (
+                    <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs">
+                      <span className="font-extrabold text-amber-900 shrink-0">% Avance:</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={el.progressPercent !== undefined ? el.progressPercent : 50}
+                        onChange={(e) => onUpdateElement({ ...el, progressPercent: Number(e.target.value) })}
+                        className="w-full accent-amber-600 cursor-pointer h-2"
+                      />
+                      <span className="font-black text-amber-900 shrink-0 w-8 text-right">{el.progressPercent ?? 50}%</span>
+                    </div>
+                  )}
+
+                  {/* Specs Details */}
+                  <div className="text-xs text-slate-700 space-y-1 bg-slate-50 rounded-lg p-2 border border-slate-100">
+                    {el.type === 'camera' ? (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span><strong>Tipo:</strong> {el.camType || 'SB858'}</span>
+                        {el.voltage && <span><strong>Voltaje:</strong> {el.voltage}V</span>}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-800">
+                          <span><strong>Longitud:</strong> {el.meters ? `${el.meters}m` : '-'}</span>
+                          <span><strong>Tubería:</strong> {el.pipes || '-'}</span>
+                        </div>
+                        {el.cables && (
+                          <div className="text-[10px] text-slate-500 truncate">
+                            <strong>Conductores:</strong> {el.cables}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Selectors for Acta & Ítem Cobro */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-[10px] font-bold text-emerald-800 block mb-0.5">Acta de Cobro:</span>
+                      <select
+                        value={normalizeActa(el.acta) === 'Sin Asignar' ? '' : normalizeActa(el.acta)}
+                        onChange={(e) => onUpdateElement({ ...el, acta: e.target.value })}
+                        className="w-full p-1.5 border border-emerald-300 rounded-lg text-xs font-bold text-emerald-900 bg-emerald-50 focus:bg-white transition cursor-pointer"
+                      >
+                        <option value="">-- Sin Asignar --</option>
+                        {availableActas.map(a => (
+                          <option key={a} value={a}>{a}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-bold text-sky-800 block mb-0.5">Ítem del Acta de Obra:</span>
+                      <select
+                        value={el.itemCobro || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const ci = contractItems.find(c => c.item === val);
+                          if (ci) {
+                            onUpdateElement({ ...el, itemCobro: ci.item, itemDescripcion: ci.description, itemUnidad: ci.unit });
+                          } else {
+                            onUpdateElement({ ...el, itemCobro: val });
+                          }
+                        }}
+                        className="w-full p-1.5 border border-sky-300 rounded-lg text-xs font-bold text-sky-900 bg-sky-50 focus:bg-white transition cursor-pointer"
+                      >
+                        <option value="">-- Sin Ítem --</option>
+                        <optgroup label="📋 Ítems del Acta / Presupuesto">
+                          {contractItems.map((ci, idx) => (
+                            <option key={`${ci.item}_${idx}`} value={ci.item}>
+                              {ci.item} - {ci.description} ({ci.unit})
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Observaciones Field */}
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Añadir observaciones de inspección..."
+                      value={el.observations || ''}
+                      onChange={(e) => onUpdateElement({ ...el, observations: e.target.value })}
+                      className="w-full p-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 bg-slate-50 focus:bg-white transition placeholder:italic"
+                    />
+                  </div>
+
+                  {/* Action Bar */}
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => onInspectElement(el)}
+                        className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 font-bold border border-sky-200 rounded-lg flex items-center gap-1 transition shadow-2xs"
+                      >
+                        <Camera className="w-3.5 h-3.5 text-sky-600" />
+                        <span>Fotos ({el.photos?.length || 0})</span>
+                      </button>
+
+                      <button
+                        onClick={() => onInspectElement(el)}
+                        className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 rounded-lg flex items-center gap-1 transition shadow-2xs"
+                      >
+                        <Activity className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Bitácora</span>
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => onLocateElement(el)}
+                      className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold border border-amber-400 rounded-lg flex items-center gap-1 transition shadow-2xs"
+                    >
+                      <Crosshair className="w-3.5 h-3.5 text-slate-950" />
+                      <span>📍 Ver en Plano</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      ) : (
+        /* Table Container */
+        <div className="overflow-x-auto responsive-table max-h-[500px]">
+          <table className="w-full text-left border-collapse text-sm">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs uppercase font-bold tracking-wider">
               <th className="py-2 px-3 min-w-[320px]">Elemento / Sector</th>
               <th className="py-2 px-2 text-center min-w-[140px]">Estado</th>
               <th className="py-2 px-2 text-center min-w-[130px]">ID Unico crono</th>
               <th className="py-2 px-2 text-center min-w-[130px]">Acta</th>
-              <th className="py-2 px-2 text-center min-w-[160px]">Ítem Cobro</th>
+              <th className="py-2 px-2 text-center min-w-[180px]">
+                <div className="flex items-center justify-center gap-1">
+                  <span>Ítem Cobro</span>
+                  <span className="text-[10px] font-semibold text-sky-700 bg-sky-50 border border-sky-200 px-1 py-0.2 rounded" title="Ítems cargados del Acta de Obra">
+                    ({contractItems.length})
+                  </span>
+                </div>
+              </th>
               <th className="py-2 px-2 text-left min-w-[160px]">Observaciones</th>
               <th className="py-2 px-2 text-center min-w-[120px]">Fecha</th>
               <th className="py-2 px-2 text-center min-w-[100px]">T. Ejecución</th>
@@ -442,17 +674,23 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                             onUpdateElement({ ...el, itemCobro: selectedItem });
                           }
                         }}
-                        className="w-full px-1 py-1 border border-sky-300 rounded text-sm font-bold text-sky-900 bg-sky-50/70 hover:bg-sky-100/90 focus:bg-white focus:ring-1 focus:ring-sky-500 transition cursor-pointer"
-                        title="Ítem del acta/presupuesto"
+                        className="w-full px-1.5 py-1 border border-sky-300 rounded text-xs font-bold text-sky-900 bg-sky-50/80 hover:bg-sky-100 focus:bg-white focus:ring-1 focus:ring-sky-500 transition cursor-pointer"
+                        title="Seleccionar Ítem de cobro cargado del Acta de Obra"
                       >
                         <option value="">-- Sin Ítem --</option>
-                        {contractItems.map((ci, idx) => (
-                          <option key={`${ci.item}_${idx}`} value={ci.item}>
-                            {ci.item} - {ci.description.slice(0, 30)}
-                          </option>
-                        ))}
+                        <optgroup label="📋 Ítems del Acta de Obra / Presupuesto">
+                          {contractItems.map((ci, idx) => (
+                            <option key={`${ci.item}_${idx}`} value={ci.item}>
+                              {ci.item} - {ci.description} ({ci.unit})
+                            </option>
+                          ))}
+                        </optgroup>
                         {el.itemCobro && !contractItems.find(c => c.item === el.itemCobro) && (
-                          <option value={el.itemCobro}>{el.itemCobro}</option>
+                          <optgroup label="✏️ Personalizado">
+                            <option value={el.itemCobro}>
+                              {el.itemCobro} - {el.itemDescripcion || 'Personalizado'}
+                            </option>
+                          </optgroup>
                         )}
                       </select>
                     </td>
@@ -524,6 +762,7 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 };

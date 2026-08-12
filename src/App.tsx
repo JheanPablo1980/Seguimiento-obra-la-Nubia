@@ -50,7 +50,7 @@ import {
   supabaseProjectMeta 
 } from './lib/supabase';
 
-import { CheckCircle2, AlertCircle, Building2, TrendingUp, BarChart3, Layers, Grid, Map as MapIcon, ClipboardList, Minimize2, Maximize2, LayoutGrid } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Building2, TrendingUp, BarChart3, Layers, Grid, Map as MapIcon, ClipboardList, Minimize2, Maximize2, LayoutGrid, HardHat } from 'lucide-react';
 
 const ADMIN_EMAIL = 'jheanmurillo73@gmail.com';
 
@@ -59,6 +59,8 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
   const [isMobile, setIsMobile] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [appMode, setAppMode] = useState<'admin' | 'field'>('admin');
+  const [fieldMobileTab, setFieldMobileTab] = useState<'both' | 'canvas' | 'bitacora'>('both');
 
   useEffect(() => {
     const handleOnline = () => setSyncStatus('synced');
@@ -78,10 +80,10 @@ export default function App() {
     };
   }, []);
 
-  const isDashboardTab = !isMobile || activeTab === 'dashboard';
-  const isPlanosTab = !isMobile || activeTab === 'planos';
-  const isBitacoraTab = !isMobile || activeTab === 'bitacora';
-  const isSectoresTab = !isMobile || activeTab === 'sectores';
+  const isDashboardTab = appMode === 'admin' && (!isMobile || activeTab === 'dashboard');
+  const isPlanosTab = appMode === 'field' || !isMobile || activeTab === 'planos' || activeTab === 'dashboard';
+  const isBitacoraTab = appMode === 'field' || !isMobile || activeTab === 'bitacora' || activeTab === 'dashboard';
+  const isSectoresTab = appMode === 'admin' && (!isMobile || activeTab === 'sectores' || activeTab === 'dashboard');
 
   const [projectMeta, setProjectMeta] = useState<ProjectMeta>(() => {
     try {
@@ -239,7 +241,6 @@ export default function App() {
 
 
   // UI View Controls & App Mode (Admin vs Field)
-  const [appMode, setAppMode] = useState<'admin' | 'field'>('admin');
 
   // Check Supabase session on mount & enforce role
   useEffect(() => {
@@ -921,6 +922,8 @@ export default function App() {
           setAppMode(nextMode);
           if (nextMode === 'field') {
             setCurrentTool('pan');
+            setCollapsedModules(prev => ({ ...prev, canvas: false, bitacora: false }));
+            setFieldMobileTab('both');
             showToast('Modo Inspección de Campo activado');
           } else {
             showToast('Modo Administrador activado (Edición y Configuración)');
@@ -948,17 +951,19 @@ export default function App() {
 
         {/* Quick Module Chips */}
         <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
-          <button
-            onClick={() => toggleModule('meta')}
-            className={`px-2 py-1 rounded font-bold border transition ${
-              !collapsedModules.meta
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-            }`}
-            title="Mostrar/Ocultar Datos del Proyecto"
-          >
-            📋 Proyecto
-          </button>
+          {appMode === 'admin' && (
+            <button
+              onClick={() => toggleModule('meta')}
+              className={`px-2 py-1 rounded font-bold border transition ${
+                !collapsedModules.meta
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+              }`}
+              title="Mostrar/Ocultar Datos del Proyecto"
+            >
+              📋 Proyecto
+            </button>
+          )}
 
           {appMode === 'admin' && (
             <>
@@ -1058,28 +1063,30 @@ export default function App() {
         </div>
       </div>
 
-      {/* Project Meta Inputs Bar Module */}
-      <CollapsibleModule
-        id="meta"
-        hidden={!isDashboardTab}
-        title="Datos Generales del Proyecto de Obra"
-        subtitle="Inspector de obra, empresa contratista/frente, fecha de inspección y ubicación"
-        icon={<Building2 className="w-4 h-4 text-amber-600" />}
-        badge={
-          <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded font-bold">
-            {elements.length} elementos registrados
-          </span>
-        }
-        isCollapsed={collapsedModules.meta}
-        onToggle={() => toggleModule('meta')}
-        headerBgClass="bg-amber-50/40"
-      >
-        <ProjectMetaBar
-          meta={projectMeta}
-          onChange={setProjectMeta}
-          totalElements={elements.length}
-        />
-      </CollapsibleModule>
+      {/* Project Meta Inputs Bar Module (Admin Mode Only) */}
+      {appMode === 'admin' && (
+        <CollapsibleModule
+          id="meta"
+          hidden={!isDashboardTab}
+          title="Datos Generales del Proyecto de Obra"
+          subtitle="Inspector de obra, empresa contratista/frente, fecha de inspección y ubicación"
+          icon={<Building2 className="w-4 h-4 text-amber-600" />}
+          badge={
+            <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded font-bold">
+              {elements.length} elementos registrados
+            </span>
+          }
+          isCollapsed={collapsedModules.meta}
+          onToggle={() => toggleModule('meta')}
+          headerBgClass="bg-amber-50/40"
+        >
+          <ProjectMetaBar
+            meta={projectMeta}
+            onChange={setProjectMeta}
+            totalElements={elements.length}
+          />
+        </CollapsibleModule>
+      )}
 
       {/* KPI Performance Dashboard Module (Admin Mode Only) */}
       {appMode === 'admin' && (
@@ -1177,119 +1184,175 @@ export default function App() {
         </CollapsibleModule>
       )}
 
+      {/* Inspector Mode Mobile Sub-Bar */}
+      {appMode === 'field' && (
+        <div className="bg-slate-900 text-white border border-slate-800 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 no-print shadow-md">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-amber-500 rounded-lg text-slate-950 font-black">
+              <HardHat className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-amber-300 block">
+                Panel de Campo / Inspector Móvil
+              </span>
+              <span className="text-[11px] text-slate-400">
+                Acceso exclusivo a Plano Interactivo y Bitácora de Registro
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center bg-slate-950 p-1 rounded-xl gap-1 border border-slate-800 text-xs w-full sm:w-auto justify-stretch sm:justify-end">
+            <button
+              onClick={() => setFieldMobileTab('canvas')}
+              className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg font-bold transition flex items-center justify-center gap-1.5 ${
+                fieldMobileTab === 'canvas'
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  : 'text-slate-300 hover:text-white bg-slate-900/50'
+              }`}
+            >
+              <MapIcon className="w-4 h-4 text-amber-900" />
+              <span>📐 Plano Interactivo</span>
+            </button>
+
+            <button
+              onClick={() => setFieldMobileTab('bitacora')}
+              className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg font-bold transition flex items-center justify-center gap-1.5 ${
+                fieldMobileTab === 'bitacora'
+                  ? 'bg-teal-500 text-slate-950 shadow-sm'
+                  : 'text-slate-300 hover:text-white bg-slate-900/50'
+              }`}
+            >
+              <ClipboardList className="w-4 h-4 text-teal-900" />
+              <span>📝 Bitácora ({elements.length})</span>
+            </button>
+
+            <button
+              onClick={() => setFieldMobileTab('both')}
+              className={`flex-1 sm:flex-none px-3 py-2 rounded-lg font-bold transition flex items-center justify-center gap-1.5 ${
+                fieldMobileTab === 'both'
+                  ? 'bg-slate-800 text-amber-300 border border-amber-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-white bg-slate-900/50'
+              }`}
+            >
+              <LayoutGrid className="w-4 h-4 text-sky-400" />
+              <span>📱 Ambos</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Grid: Left Canvas + Toolbar, Right Bitácora Table */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-start">
         {/* Left Column: Canvas & Toolbar */}
-        <div className={`${
-          collapsedModules.bitacora && !collapsedModules.canvas
-            ? 'lg:col-span-12'
-            : collapsedModules.canvas && !collapsedModules.bitacora
-            ? 'lg:col-span-12'
-            : 'lg:col-span-7'
-        } flex flex-col gap-2`}>
-          <CollapsibleModule
-            id="canvas"
-            hidden={!isPlanosTab}
-            title="Plano Interactivo & Herramientas de Inspección"
-            subtitle="Cargue de plano en PDF/Imagen, demarcación de zonas y trazado"
-            icon={<MapIcon className="w-4 h-4 text-blue-600" />}
-            badge={
-              <span className="text-[10px] bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded font-bold">
-                Zoom {Math.round(zoomLevel * 100)}%
-              </span>
-            }
-            isCollapsed={collapsedModules.canvas}
-            onToggle={() => toggleModule('canvas')}
-            headerBgClass="bg-blue-50/40"
-          >
-            <div className="p-2 space-y-2">
-              <CanvasToolbar
-                currentTool={currentTool}
-                onSelectTool={setCurrentTool}
-                areaPointCount={currentAreaPoints.length}
-                onUndoAreaPoint={() => {
-                  setCurrentAreaPoints(pts => pts.slice(0, -1));
-                  showToast('Último punto eliminado');
-                }}
-                onFinishArea={handleFinishArea}
-                onCancelArea={() => {
-                  setCurrentAreaPoints([]);
-                  showToast('Demarcación cancelada');
-                }}
-                camPrefix={camPrefix}
-                onCamPrefixChange={setCamPrefix}
-                camCounter={camCounter}
-                onCamCounterChange={setCamCounter}
-                camDefaultType={camDefaultType}
-                onCamDefaultTypeChange={setCamDefaultType}
-                zoomLevel={zoomLevel}
+        {(appMode === 'admin' || fieldMobileTab === 'both' || fieldMobileTab === 'canvas') && (
+          <div className={`${
+            (appMode === 'field' && fieldMobileTab === 'canvas') || (collapsedModules.bitacora && !collapsedModules.canvas)
+              ? 'lg:col-span-12'
+              : 'lg:col-span-7'
+          } flex flex-col gap-2 w-full`}>
+            <CollapsibleModule
+              id="canvas"
+              hidden={!isPlanosTab}
+              title="Plano Interactivo & Herramientas de Inspección"
+              subtitle="Cargue de plano en PDF/Imagen, demarcación de zonas y trazado"
+              icon={<MapIcon className="w-4 h-4 text-blue-600" />}
+              badge={
+                <span className="text-[10px] bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded font-bold">
+                  Zoom {Math.round(zoomLevel * 100)}%
+                </span>
+              }
+              isCollapsed={collapsedModules.canvas}
+              onToggle={() => toggleModule('canvas')}
+              headerBgClass="bg-blue-50/40"
+            >
+              <div className="p-2 space-y-2">
+                <CanvasToolbar
+                  currentTool={currentTool}
+                  onSelectTool={setCurrentTool}
+                  areaPointCount={currentAreaPoints.length}
+                  onUndoAreaPoint={() => {
+                    setCurrentAreaPoints(pts => pts.slice(0, -1));
+                    showToast('Último punto eliminado');
+                  }}
+                  onFinishArea={handleFinishArea}
+                  onCancelArea={() => {
+                    setCurrentAreaPoints([]);
+                    showToast('Demarcación cancelada');
+                  }}
+                  camPrefix={camPrefix}
+                  onCamPrefixChange={setCamPrefix}
+                  camCounter={camCounter}
+                  onCamCounterChange={setCamCounter}
+                  camDefaultType={camDefaultType}
+                  onCamDefaultTypeChange={setCamDefaultType}
+                  zoomLevel={zoomLevel}
                   onZoomChange={setZoomLevel}
-                onZoomIn={() => setZoomLevel(z => Math.min(4.0, z * 1.25))}
-                onZoomOut={() => setZoomLevel(z => Math.max(0.3, z * 0.8))}
-                onZoomReset={() => setZoomLevel(1.0)}
-                onZoomFit={() => {
-                  setZoomLevel(1.0);
-                  if (canvasRef.current) {
-                    canvasRef.current.resetView();
-                  }
-                  showToast('Plano ajustado al lienzo');
-                }}
-                showCameraLabels={showCameraLabels}
-                onToggleCameraLabels={() => setShowCameraLabels(!showCameraLabels)}
-                showLineLabels={showLineLabels}
-                onToggleLineLabels={() => setShowLineLabels(!showLineLabels)}
-                showAreaLabels={showAreaLabels}
-                onToggleAreaLabels={() => setShowAreaLabels(!showAreaLabels)}
-                showSpecsLabels={showSpecsLabels}
-                onToggleSpecsLabels={() => setShowSpecsLabels(!showSpecsLabels)}
-                iconScale={iconScale}
-                onChangeIconScale={(s) => {
-                  setIconScale(s);
-                  showToast(`Escala de íconos ajustada a ${s}x`);
-                }}
-                appMode={appMode}
-                onOpenAiRecognition={() => setIsAiModalOpen(true)}
-              />
+                  onZoomIn={() => setZoomLevel(z => Math.min(4.0, z * 1.25))}
+                  onZoomOut={() => setZoomLevel(z => Math.max(0.3, z * 0.8))}
+                  onZoomReset={() => setZoomLevel(1.0)}
+                  onZoomFit={() => {
+                    setZoomLevel(1.0);
+                    if (canvasRef.current) {
+                      canvasRef.current.resetView();
+                    }
+                    showToast('Plano ajustado al lienzo');
+                  }}
+                  showCameraLabels={showCameraLabels}
+                  onToggleCameraLabels={() => setShowCameraLabels(!showCameraLabels)}
+                  showLineLabels={showLineLabels}
+                  onToggleLineLabels={() => setShowLineLabels(!showLineLabels)}
+                  showAreaLabels={showAreaLabels}
+                  onToggleAreaLabels={() => setShowAreaLabels(!showAreaLabels)}
+                  showSpecsLabels={showSpecsLabels}
+                  onToggleSpecsLabels={() => setShowSpecsLabels(!showSpecsLabels)}
+                  iconScale={iconScale}
+                  onChangeIconScale={(s) => {
+                    setIconScale(s);
+                    showToast(`Escala de íconos ajustada a ${s}x`);
+                  }}
+                  appMode={appMode}
+                  onOpenAiRecognition={() => setIsAiModalOpen(true)}
+                />
 
-              <BlueprintCanvas
-                ref={canvasRef}
-                blueprintImg={blueprintImg}
-                currentTool={currentTool}
-                strokes={strokes}
-                elements={elements}
-                areas={areas}
-                zoomLevel={zoomLevel}
+                <BlueprintCanvas
+                  ref={canvasRef}
+                  blueprintImg={blueprintImg}
+                  currentTool={currentTool}
+                  strokes={strokes}
+                  elements={elements}
+                  areas={areas}
+                  zoomLevel={zoomLevel}
                   onZoomChange={setZoomLevel}
-                iconScale={iconScale}
-                showCameraLabels={showCameraLabels}
-                showLineLabels={showLineLabels}
-                showAreaLabels={showAreaLabels}
-                showSpecsLabels={showSpecsLabels}
-                camPrefix={camPrefix}
-                camCounter={camCounter}
-                camDefaultType={camDefaultType}
-                isLocked={globalConfig.lockBlueprintLayout}
-                currentAreaPoints={currentAreaPoints}
-                onAddAreaPoint={handleAddAreaPoint}
-                onFinishArea={handleFinishArea}
-                onAddStroke={handleAddStroke}
-                onAddElement={handleAddElement}
-                onUpdateElement={handleUpdateElement}
-                onEraseAt={handleEraseAt}
-                onInspectElement={setInspectedElement}
-              />
-            </div>
-          </CollapsibleModule>
-        </div>
+                  iconScale={iconScale}
+                  showCameraLabels={showCameraLabels}
+                  showLineLabels={showLineLabels}
+                  showAreaLabels={showAreaLabels}
+                  showSpecsLabels={showSpecsLabels}
+                  camPrefix={camPrefix}
+                  camCounter={camCounter}
+                  camDefaultType={camDefaultType}
+                  isLocked={globalConfig.lockBlueprintLayout}
+                  currentAreaPoints={currentAreaPoints}
+                  onAddAreaPoint={handleAddAreaPoint}
+                  onFinishArea={handleFinishArea}
+                  onAddStroke={handleAddStroke}
+                  onAddElement={handleAddElement}
+                  onUpdateElement={handleUpdateElement}
+                  onEraseAt={handleEraseAt}
+                  onInspectElement={setInspectedElement}
+                />
+              </div>
+            </CollapsibleModule>
+          </div>
+        )}
 
         {/* Right Column: Bitácora Table */}
-        <div className={`${
-          collapsedModules.canvas && !collapsedModules.bitacora
-            ? 'lg:col-span-12'
-            : collapsedModules.bitacora && !collapsedModules.canvas
-            ? 'lg:col-span-12'
-            : 'lg:col-span-5'
-        } flex flex-col gap-2`}>
+        {(appMode === 'admin' || fieldMobileTab === 'both' || fieldMobileTab === 'bitacora') && (
+          <div className={`${
+            (appMode === 'field' && fieldMobileTab === 'bitacora') || (collapsedModules.canvas && !collapsedModules.bitacora)
+              ? 'lg:col-span-12'
+              : 'lg:col-span-5'
+          } flex flex-col gap-2 w-full`}>
           <CollapsibleModule
             id="bitacora"
             hidden={!isBitacoraTab}
@@ -1351,9 +1414,11 @@ export default function App() {
               onInspectElement={setInspectedElement}
               getAreaNameForElement={getAreaNameForElement}
               globalConfig={globalConfig}
+              appMode={appMode}
             />
           </CollapsibleModule>
         </div>
+        )}
       </div>
 
       {/* Area Demarcation Modal */}
@@ -1502,23 +1567,66 @@ export default function App() {
 
       {/* Mobile Bottom Navigation */}
       {isMobile && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex items-center justify-around p-2 z-[100] pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-          <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center p-2 ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-slate-500'}`}>
-            <LayoutGrid className="w-5 h-5 mb-1" />
-            <span className="text-[10px] font-bold">Panel</span>
-          </button>
-          <button onClick={() => setActiveTab('sectores')} className={`flex flex-col items-center p-2 ${activeTab === 'sectores' ? 'text-blue-600' : 'text-slate-500'}`}>
-            <Building2 className="w-5 h-5 mb-1" />
-            <span className="text-[10px] font-bold">Sectores</span>
-          </button>
-          <button onClick={() => setActiveTab('planos')} className={`flex flex-col items-center p-2 ${activeTab === 'planos' ? 'text-blue-600' : 'text-slate-500'}`}>
-            <MapIcon className="w-5 h-5 mb-1" />
-            <span className="text-[10px] font-bold">Planos</span>
-          </button>
-          <button onClick={() => setActiveTab('bitacora')} className={`flex flex-col items-center p-2 ${activeTab === 'bitacora' ? 'text-blue-600' : 'text-slate-500'}`}>
-            <ClipboardList className="w-5 h-5 mb-1" />
-            <span className="text-[10px] font-bold">Bitácora</span>
-          </button>
+        <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex items-center justify-around p-1.5 z-[100] pb-[calc(env(safe-area-inset-bottom)+4px)] shadow-lg no-print">
+          {appMode === 'field' ? (
+            <>
+              <button
+                onClick={() => {
+                  setFieldMobileTab('canvas');
+                  setActiveTab('planos');
+                }}
+                className={`flex flex-col items-center py-1 px-3 rounded-lg transition ${
+                  fieldMobileTab === 'canvas' ? 'text-amber-400 bg-amber-500/10 font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <MapIcon className="w-5 h-5 mb-0.5" />
+                <span className="text-[10px]">📐 Plano</span>
+              </button>
+              <button
+                onClick={() => {
+                  setFieldMobileTab('bitacora');
+                  setActiveTab('bitacora');
+                }}
+                className={`flex flex-col items-center py-1 px-3 rounded-lg transition ${
+                  fieldMobileTab === 'bitacora' ? 'text-teal-400 bg-teal-500/10 font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <ClipboardList className="w-5 h-5 mb-0.5" />
+                <span className="text-[10px]">📝 Bitácora</span>
+              </button>
+              <button
+                onClick={() => {
+                  setFieldMobileTab('both');
+                  setActiveTab('dashboard');
+                }}
+                className={`flex flex-col items-center py-1 px-3 rounded-lg transition ${
+                  fieldMobileTab === 'both' ? 'text-sky-400 bg-sky-500/10 font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <LayoutGrid className="w-5 h-5 mb-0.5" />
+                <span className="text-[10px]">📱 Ambos</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center p-2 ${activeTab === 'dashboard' ? 'text-blue-400 font-bold' : 'text-slate-400'}`}>
+                <LayoutGrid className="w-5 h-5 mb-1" />
+                <span className="text-[10px]">Panel</span>
+              </button>
+              <button onClick={() => setActiveTab('sectores')} className={`flex flex-col items-center p-2 ${activeTab === 'sectores' ? 'text-blue-400 font-bold' : 'text-slate-400'}`}>
+                <Building2 className="w-5 h-5 mb-1" />
+                <span className="text-[10px]">Sectores</span>
+              </button>
+              <button onClick={() => setActiveTab('planos')} className={`flex flex-col items-center p-2 ${activeTab === 'planos' ? 'text-blue-400 font-bold' : 'text-slate-400'}`}>
+                <MapIcon className="w-5 h-5 mb-1" />
+                <span className="text-[10px]">Planos</span>
+              </button>
+              <button onClick={() => setActiveTab('bitacora')} className={`flex flex-col items-center p-2 ${activeTab === 'bitacora' ? 'text-blue-400 font-bold' : 'text-slate-400'}`}>
+                <ClipboardList className="w-5 h-5 mb-1" />
+                <span className="text-[10px]">Bitácora</span>
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

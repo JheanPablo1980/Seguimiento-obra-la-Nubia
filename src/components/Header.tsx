@@ -105,7 +105,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           <p className="text-xs text-slate-300">
             {appMode === 'field'
-              ? 'Vista compacta para inspectores: actualización de avances y captura de fotos'
+              ? 'Acceso de Inspector: Plano Interactivo y Bitácora de Registro y Control'
               : 'Canalizaciones Eléctricas / Telecomunicaciones, Cámaras y Cajas de Inspección'}
           </p>
             </div>
@@ -160,8 +160,8 @@ export const Header: React.FC<HeaderProps> = ({
           </>
         )}
 
-        {/* Cronograma y Avance de Obra Button */}
-        {onOpenScheduleProgress && (
+        {/* Cronograma y Avance de Obra Button (Admin Only) */}
+        {appMode === 'admin' && onOpenScheduleProgress && (
           <button
             onClick={() => onOpenScheduleProgress('matrix')}
             className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition border border-indigo-500/50 shadow-sm"
@@ -172,8 +172,8 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Memoria de Cálculo / Actas Button */}
-        {onOpenMemoriaModal && (
+        {/* Memoria de Cálculo / Actas Button (Admin Only) */}
+        {appMode === 'admin' && onOpenMemoriaModal && (
           <button
             onClick={() => onOpenMemoriaModal(false)}
             className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition shadow-sm border border-emerald-500/50"

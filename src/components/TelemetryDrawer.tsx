@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { InspectionElement, StatusType, CameraNorm, ScheduleItem, GlobalConfig, VersionHistoryLog } from '../types';
+import { InspectionElement, StatusType, CameraNorm, ScheduleItem, GlobalConfig, VersionHistoryLog, ContractualItem } from '../types';
+import { DEFAULT_CONTRACTUAL_ITEMS } from '../data/sampleData';
 import { supabaseAudit } from '../lib/supabase';
 import { adjustTramoMeters } from '../utils/tramoUtils';
 import { normalizeActa, getAvailableActas } from '../utils/actaUtils';
@@ -28,6 +29,29 @@ export const TelemetryDrawer: React.FC<TelemetryDrawerProps> = ({
   const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
   const [historyLogs, setHistoryLogs] = useState<VersionHistoryLog[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [contractItems, setContractItems] = useState<ContractualItem[]>([]);
+
+  useEffect(() => {
+    const loadContractItems = () => {
+      const saved = localStorage.getItem('obra_contract_items_v1');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setContractItems(parsed);
+            return;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      setContractItems(DEFAULT_CONTRACTUAL_ITEMS);
+    };
+
+    loadContractItems();
+    window.addEventListener('contractItemsUpdated', loadContractItems);
+    return () => window.removeEventListener('contractItemsUpdated', loadContractItems);
+  }, []);
 
   useEffect(() => {
     if (element && activeTab === 'history') {
@@ -349,7 +373,48 @@ export const TelemetryDrawer: React.FC<TelemetryDrawerProps> = ({
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-2 text-xs">
+          <div>
+            <span className="text-[10px] font-bold text-slate-300 block mb-1">Cargar Ítem desde el Acta / Presupuesto:</span>
+            <select
+              value={element.itemCobro || ''}
+              onChange={(e) => {
+                const selectedVal = e.target.value;
+                const foundItem = contractItems.find(c => c.item === selectedVal);
+                if (foundItem) {
+                  onUpdateElement({
+                    ...element,
+                    itemCobro: foundItem.item,
+                    itemDescripcion: foundItem.description,
+                    itemUnidad: foundItem.unit,
+                    lastUpdate: new Date().toLocaleTimeString()
+                  });
+                } else {
+                  onUpdateElement({
+                    ...element,
+                    itemCobro: selectedVal,
+                    lastUpdate: new Date().toLocaleTimeString()
+                  });
+                }
+              }}
+              className="w-full bg-slate-950 border border-sky-500/50 rounded p-2 text-white font-bold text-xs focus:ring-1 focus:ring-sky-400 cursor-pointer"
+            >
+              <option value="">-- Seleccionar Ítem del Acta --</option>
+              <optgroup label="📋 Ítems del Acta de Obra / Presupuesto">
+                {contractItems.map((ci, idx) => (
+                  <option key={`${ci.item}_${idx}`} value={ci.item}>
+                    {ci.item} - {ci.description} ({ci.unit})
+                  </option>
+                ))}
+              </optgroup>
+              {element.itemCobro && !contractItems.find(c => c.item === element.itemCobro) && (
+                <optgroup label="✏️ Personalizado">
+                  <option value={element.itemCobro}>{element.itemCobro} - {element.itemDescripcion || 'Personalizado'}</option>
+                </optgroup>
+              )}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 text-xs pt-1">
             <div>
               <span className="text-[10px] font-bold text-slate-400 block mb-0.5">N° Ítem</span>
               <input
@@ -377,40 +442,6 @@ export const TelemetryDrawer: React.FC<TelemetryDrawerProps> = ({
                 placeholder="Ej: SEI CAMPANA PVC 4''"
                 className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-slate-200 text-xs"
               />
-            </div>
-          </div>
-
-          {/* Preset Item suggestions */}
-          <div className="space-y-1 pt-1">
-            <span className="text-[10px] text-slate-400 block font-semibold">Seleccionar ítem predefinido del presupuesto:</span>
-            <div className="flex flex-wrap gap-1 text-[10px]">
-              {[
-                { item: '3.63', desc: 'SEI CAMPANA PVC 4"', unit: 'UN' },
-                { item: '3.59', desc: 'CÁMARA DE INSPECCIÓN ELÉCTRICA EN CONCRETO', unit: 'UN' },
-                { item: '6.1 D', desc: 'CANALIZACIÓN SUBTERRÁNEA PVC 4" SCH 40', unit: 'M' },
-                { item: '6.1 E', desc: 'ACOMETIDA TRIFÁSICA CABLE 3#250', unit: 'M' },
-                { item: '2.05', desc: 'CAJA DOMICILIARIA TELECOM', unit: 'UN' }
-              ].map(preset => (
-                <button
-                  key={preset.item}
-                  type="button"
-                  onClick={() => onUpdateElement({
-                    ...element,
-                    itemCobro: preset.item,
-                    itemDescripcion: preset.desc,
-                    itemUnidad: preset.unit,
-                    lastUpdate: new Date().toLocaleTimeString()
-                  })}
-                  className={`px-2 py-1 rounded text-left transition border ${
-                    element.itemCobro === preset.item
-                      ? 'bg-sky-600 text-white border-sky-400 font-bold'
-                      : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
-                  }`}
-                  title={preset.desc}
-                >
-                  <strong className="text-amber-300">{preset.item}</strong> - {preset.desc.slice(0, 18)}...
-                </button>
-              ))}
             </div>
           </div>
         </div>
