@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { InspectionElement, StatusType, CameraNorm, ScheduleItem, GlobalConfig } from '../types';
+import React, { useState, useEffect } from 'react';
+import { InspectionElement, StatusType, CameraNorm, ScheduleItem, GlobalConfig, VersionHistoryLog } from '../types';
+import { supabaseAudit } from '../lib/supabase';
 import { adjustTramoMeters } from '../utils/tramoUtils';
 import { normalizeActa, getAvailableActas } from '../utils/actaUtils';
-import { ClipboardList, Clock, X, ShieldCheck, Activity, AlertTriangle, Trash2, Calendar, Tag, Ruler, Wifi, Camera, Image, Eye, CalendarCheck, FileText, Plus, Minus, Move } from 'lucide-react';
+import { ClipboardList, Clock, X, ShieldCheck, Activity, AlertTriangle, Trash2, Calendar, Tag, Ruler, Wifi, Camera, Image, Eye, CalendarCheck, FileText, Plus, Minus, Move, History } from 'lucide-react';
 
 interface TelemetryDrawerProps {
   element: InspectionElement | null;
@@ -24,6 +25,26 @@ export const TelemetryDrawer: React.FC<TelemetryDrawerProps> = ({
   globalConfig
 }) => {
   const [activePhotoUrl, setActivePhotoUrl] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
+  const [historyLogs, setHistoryLogs] = useState<VersionHistoryLog[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  useEffect(() => {
+    if (element && activeTab === 'history') {
+      const loadHistory = async () => {
+        setIsLoadingHistory(true);
+        try {
+          const logs = await supabaseAudit.fetchHistoryForElement(String(element.id), 50);
+          setHistoryLogs(logs);
+        } catch (e) {
+          console.error(e);
+        } finally {
+          setIsLoadingHistory(false);
+        }
+      };
+      loadHistory();
+    }
+  }, [element?.id, activeTab]);
 
   if (!element) return null;
 
@@ -140,8 +161,25 @@ export const TelemetryDrawer: React.FC<TelemetryDrawerProps> = ({
           </div>
         </div>
 
-        {/* Basic Info: Editable Label & Date */}
-        <div className="bg-slate-800/90 rounded-xl p-3 border border-slate-700/80 space-y-3">
+        <div className="flex bg-slate-800 rounded-lg p-1">
+          <button
+            onClick={() => setActiveTab('details')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-semibold transition ${activeTab === 'details' ? 'bg-sky-500/20 text-sky-300' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            <Eye className="w-3.5 h-3.5" /> Detalles
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-semibold transition ${activeTab === 'history' ? 'bg-amber-500/20 text-amber-300' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            <History className="w-3.5 h-3.5" /> Historial
+          </button>
+        </div>
+
+        {activeTab === 'details' ? (
+          <>
+            {/* Basic Info: Editable Label & Date */}
+            <div className="bg-slate-800/90 rounded-xl p-3 border border-slate-700/80 space-y-3">
           <div>
             <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1 flex items-center gap-1">
               <Tag className="w-3.5 h-3.5 text-sky-400" /> Identificador / Etiqueta
@@ -722,6 +760,37 @@ export const TelemetryDrawer: React.FC<TelemetryDrawerProps> = ({
             <Trash2 className="w-3.5 h-3.5" />
             <span>Eliminar de la Bitácora</span>
           </button>
+        )}
+          </>
+        ) : (
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1 scrollbar-thin scrollbar-thumb-slate-700 pb-2">
+            <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-3">Línea de Tiempo de Ejecución</h4>
+            {isLoadingHistory ? (
+              <div className="flex flex-col items-center justify-center py-10 text-slate-400 gap-2">
+                <Activity className="w-5 h-5 animate-spin text-amber-500" />
+                <span className="text-xs">Cargando historial...</span>
+              </div>
+            ) : historyLogs.length === 0 ? (
+              <div className="text-center text-slate-500 py-10 text-xs">
+                No hay registros de historial para este elemento.
+              </div>
+            ) : (
+              <div className="relative border-l border-slate-700 ml-3 space-y-5">
+                {historyLogs.map(log => (
+                  <div key={log.id} className="relative pl-5">
+                    <div className="absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-slate-900 border-2 border-amber-500"></div>
+                    <div className="bg-slate-800/80 rounded-lg p-2.5 border border-slate-700/80 shadow-sm flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-sky-300 font-mono font-medium">{new Date(log.timestamp).toLocaleDateString()} {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span className="text-emerald-400 bg-emerald-950/50 px-1.5 py-0.5 rounded font-bold">{log.userName}</span>
+                      </div>
+                      <p className="text-xs text-slate-200">{log.details}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
 

@@ -1,0 +1,16 @@
+{
+  "name": "Seguimiento y Control de Obra - La Nubia",
+  "short_name": "Obra - La Nubia",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f1f5f9",
+  "theme_color": "#0f172a",
+  "description": "Aplicación profesional de seguimiento e inspección de obra.",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

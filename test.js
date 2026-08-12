@@ -1,0 +1,8 @@
+const text = `ITEM;DESCRIPCIN;UNID;CANTIDAD;ACTA1;ACTA 2;ACTA 3
+0;CAMPAMENTO DE OBRA - TIPO CONTENEDOR 2 UNIDADES;MES;8,00;;;
+0,2;2 UNIDAD SANITARA MOVIL - 2 ASEOS SEMANALES;MES;8,00;;;
+2,2;"SEI ACOMETIDA 12#350 +4#350 + 1#3/0 THHN PARA TABLEROS
+DISTRIBUCION TRAFO MANZANA 1";ML;7;;;`
+
+    const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+    console.log(lines.length);

@@ -44,8 +44,18 @@ export interface ScheduleItem {
   entrega2Target: number; // e.g. 117
   entrega2Label?: string; // e.g. "Entrega 2 - Agosto 2026"
   finalDeadline?: string; // e.g. "01/08/2026"
-  category?: 'tuberia' | 'camara' | 'sector' | 'general';
+  category?: 'tuberia' | 'camara' | 'sector' | 'general' | string;
   notes?: string;
+
+  // New imported cronograma fields
+  duracion?: string;
+  start?: string;
+  finish?: string;
+  porcentajeCompletado?: number;
+  comienzoLineaBase?: string;
+  finLineaBase?: string;
+  duracionLineaBase?: string;
+  rawExtras?: Record<string, string>;
 }
 
 export interface InspectionElement {
@@ -74,6 +84,11 @@ export interface InspectionElement {
   itemUnidad?: string; // e.g. "UN", "M", "ML", "KG"
   progressPercent?: number; // % 0-100 when status === 'En proceso'
   observations?: string; // Observaciones / Notas de inspección o campo
+  
+  // Timeline tracking
+  startDate?: string; // Cuando pasa a 'En proceso'
+  endDate?: string; // Cuando pasa a 'Terminado'
+
   // Telemetry simulation fields
   voltage?: number; // e.g. 220V or 24V
   signalStrength?: number; // % 0-100
@@ -169,6 +184,7 @@ export interface GlobalConfig {
   enableCableConsolidation: boolean;
   allowOnlyPipesOption: boolean;
   totalActas?: number; // Cantidad total de Actas de Obra configuradas (ej. 10)
+  lockBlueprintLayout?: boolean; // Opción para que el admin fije el plano y los elementos
 }
 
 export interface VersionHistoryLog {

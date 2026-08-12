@@ -90,7 +90,7 @@ export const Header: React.FC<HeaderProps> = ({
           appMode === 'field' ? 'bg-amber-500 text-slate-950' : 'bg-sky-500 text-slate-950'
         }`}>
           {appMode === 'field' ? <HardHat className="w-6 h-6" /> : <Compass className="w-6 h-6" />}
-        </div>
+            </div>
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-base sm:text-lg font-bold tracking-tight">Plano de Seguimiento y Control de Obra</h1>
@@ -102,14 +102,14 @@ export const Header: React.FC<HeaderProps> = ({
               {appMode === 'field' ? <HardHat className="w-3 h-3" /> : <Shield className="w-3 h-3" />}
               {appMode === 'field' ? 'Modo Inspección Campo' : 'Modo Administrador'}
             </span>
-          </div>
+            </div>
           <p className="text-xs text-slate-300">
             {appMode === 'field'
               ? 'Vista compacta para inspectores: actualización de avances y captura de fotos'
               : 'Canalizaciones Eléctricas / Telecomunicaciones, Cámaras y Cajas de Inspección'}
           </p>
-        </div>
-      </div>
+            </div>
+            </div>
 
       <div className="flex items-center gap-2 no-print flex-wrap">
         {/* Toggle Mode Button */}
@@ -270,27 +270,16 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
-              </div>
+            </div>
             )}
 
             {/* Clear Canvas */}
             <button
               onClick={onClearCanvas}
               className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
-              title="Limpiar trazos agregados"
-            >
+              title="Limpiar trazos agregados">
               <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
               <span>Limpiar Trazos</span>
-            </button>
-
-            {/* Data Backup / Import */}
-            <button
-              onClick={onOpenDataBackup}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
-              title="Exportar / Importar Datos JSON"
-            >
-              <Download className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Datos JSON</span>
             </button>
 
             {/* Version History & Audit Log */}
@@ -316,21 +305,9 @@ export const Header: React.FC<HeaderProps> = ({
                 <span>Configuración</span>
               </button>
             )}
-
           </>
         )}
-
-        {/* Export / Print PDF */}
-        <button
-          onClick={onExportPDF}
-          className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
-        >
-          <Printer className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Imprimir / PDF</span>
-        </button>
       </div>
     </header>
   );
 };
-
-

@@ -55,7 +55,34 @@ import { CheckCircle2, AlertCircle, Building2, TrendingUp, BarChart3, Layers, Gr
 const ADMIN_EMAIL = 'jheanmurillo73@gmail.com';
 
 export default function App() {
-  // Persistent Application State with LocalStorage fallbacks
+
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
+  const [isMobile, setIsMobile] = useState(false);
+  const [activeTab, setActiveTab] = useState('dashboard');
+
+  useEffect(() => {
+    const handleOnline = () => setSyncStatus('synced');
+    const handleOffline = () => setSyncStatus('offline');
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    if (!navigator.onLine) setSyncStatus('offline');
+    
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('resize', checkMobile);
+    };
+  }, []);
+
+  const isDashboardTab = !isMobile || activeTab === 'dashboard';
+  const isPlanosTab = !isMobile || activeTab === 'planos';
+  const isBitacoraTab = !isMobile || activeTab === 'bitacora';
+  const isSectoresTab = !isMobile || activeTab === 'sectores';
+
   const [projectMeta, setProjectMeta] = useState<ProjectMeta>(() => {
     try {
       const saved = localStorage.getItem('obra_project_meta_v2');
@@ -142,17 +169,23 @@ export default function App() {
   // Automatic LocalStorage & Supabase Cloud sync effects
   useEffect(() => {
     try { localStorage.setItem('obra_project_meta_v2', JSON.stringify(projectMeta)); } catch (e) {}
-    supabaseProjectMeta.saveMeta(projectMeta);
+    setSyncStatus('syncing');
+    const t = setTimeout(() => { supabaseProjectMeta.saveMeta(projectMeta).then(() => setSyncStatus(navigator.onLine ? 'synced' : 'offline')); }, 2000);
+    return () => clearTimeout(t);
   }, [projectMeta]);
 
   useEffect(() => {
     try { localStorage.setItem('obra_areas_v2', JSON.stringify(areas)); } catch (e) {}
-    supabaseAreas.saveAreas(areas);
+    setSyncStatus('syncing');
+    const t = setTimeout(() => { supabaseAreas.saveAreas(areas).then(() => setSyncStatus(navigator.onLine ? 'synced' : 'offline')); }, 2000);
+    return () => clearTimeout(t);
   }, [areas]);
 
   useEffect(() => {
     try { localStorage.setItem('obra_elements_v2', JSON.stringify(elements)); } catch (e) {}
-    supabaseElements.saveAllElements(elements);
+    setSyncStatus('syncing');
+    const t = setTimeout(() => { supabaseElements.saveAllElements(elements).then(() => setSyncStatus(navigator.onLine ? 'synced' : 'offline')); }, 3000);
+    return () => clearTimeout(t);
   }, [elements]);
 
   useEffect(() => {
@@ -199,7 +232,9 @@ export default function App() {
 
   useEffect(() => {
     try { localStorage.setItem('obra_schedule_items_v1', JSON.stringify(scheduleItems)); } catch (e) {}
-    supabaseSchedule.saveScheduleItems(scheduleItems);
+    setSyncStatus('syncing');
+    const t = setTimeout(() => { supabaseSchedule.saveScheduleItems(scheduleItems).then(() => setSyncStatus(navigator.onLine ? 'synced' : 'offline')); }, 3000);
+    return () => clearTimeout(t);
   }, [scheduleItems]);
 
 
@@ -212,7 +247,7 @@ export default function App() {
       if (user) {
         setCurrentUser(user);
         const lowerEmail = user.email.trim().toLowerCase();
-        const isAdmin = lowerEmail === ADMIN_EMAIL.toLowerCase() || user.role === 'admin' || lowerEmail.includes('admin');
+        const isAdmin = lowerEmail === ADMIN_EMAIL.toLowerCase() || user.role === 'admin';
         setAppMode(isAdmin ? 'admin' : 'field');
       } else {
         // If not logged in, default to field inspector mode for security
@@ -225,7 +260,7 @@ export default function App() {
     setCurrentUser(user);
     if (user) {
       const lowerEmail = user.email.trim().toLowerCase();
-      const isAdmin = lowerEmail === ADMIN_EMAIL.toLowerCase() || user.role === 'admin' || lowerEmail.includes('admin');
+      const isAdmin = lowerEmail === ADMIN_EMAIL.toLowerCase() || user.role === 'admin' ;
       if (isAdmin) {
         setAppMode('admin');
         showToast(`¡Sesión de Administrador activa! (${user.email})`);
@@ -509,6 +544,18 @@ export default function App() {
 
   const handleUpdateElement = (updated: InspectionElement) => {
     const oldEl = elements.find(e => e.id === updated.id);
+    
+    // Auto-set timeline dates when status changes
+    if (oldEl && oldEl.status !== updated.status) {
+      if (updated.status === 'En proceso' && !updated.startDate) {
+        updated.startDate = new Date().toISOString();
+      }
+      if (updated.status === 'Terminado' && !updated.endDate) {
+        updated.endDate = new Date().toISOString();
+        if (!updated.startDate) updated.startDate = new Date().toISOString(); // Fallback if never went through 'En proceso'
+      }
+    }
+
     setElements(prev => prev.map(e => e.id === updated.id ? updated : e));
     if (inspectedElement && inspectedElement.id === updated.id) {
       setInspectedElement(updated);
@@ -818,7 +865,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 p-2 sm:p-4 flex flex-col gap-3 max-w-[1700px] mx-auto print-container">
+    <div className="min-h-[100dvh] bg-slate-100 text-slate-900 p-2 sm:p-4 flex flex-col gap-3 max-w-[1700px] mx-auto print-container pb-[calc(env(safe-area-inset-bottom)+70px)] lg:pb-4">
       {/* Toast Notification */}
       {toastMsg && (
         <div className="fixed bottom-4 right-4 bg-slate-900 text-white px-4 py-2.5 rounded-lg shadow-xl text-xs flex items-center gap-2 z-50 animate-in fade-in slide-in-from-bottom-3 duration-200 border border-slate-700">
@@ -828,7 +875,7 @@ export default function App() {
       )}
 
       {/* Header */}
-      <Header
+      <Header syncStatus={syncStatus}
         onFileUpload={handleFileUpload}
         pdfDoc={pdfDoc}
         currentPdfPage={currentPdfPage}
@@ -862,7 +909,7 @@ export default function App() {
 
         onToggleAppMode={() => {
           const userEmail = currentUser?.email?.trim().toLowerCase() || '';
-          const isUserAdmin = userEmail === ADMIN_EMAIL.toLowerCase() || currentUser?.role === 'admin' || userEmail.includes('admin');
+          const isUserAdmin = userEmail === ADMIN_EMAIL.toLowerCase() || currentUser?.role === 'admin' ;
           
           if (appMode === 'field' && !isUserAdmin) {
             setIsAuthModalOpen(true);
@@ -1014,6 +1061,7 @@ export default function App() {
       {/* Project Meta Inputs Bar Module */}
       <CollapsibleModule
         id="meta"
+        hidden={!isDashboardTab}
         title="Datos Generales del Proyecto de Obra"
         subtitle="Inspector de obra, empresa contratista/frente, fecha de inspección y ubicación"
         icon={<Building2 className="w-4 h-4 text-amber-600" />}
@@ -1037,6 +1085,7 @@ export default function App() {
       {appMode === 'admin' && (
         <CollapsibleModule
           id="kpis"
+          hidden={!isDashboardTab}
           title="Panel de Métricas e Indicadores KPI"
           subtitle="Avances físicos, porcentajes de ejecución y estadísticas detalladas por Acta de Cobro"
           icon={<TrendingUp className="w-4 h-4 text-emerald-600" />}
@@ -1061,6 +1110,7 @@ export default function App() {
       {showCharts && appMode === 'admin' && (
         <CollapsibleModule
           id="charts"
+          hidden={!isDashboardTab}
           title="Gráficos de Avance y Distribución en Tiempo Real"
           subtitle="Visualización analítica de metrajes de canalización y cámaras por sector"
           icon={<BarChart3 className="w-4 h-4 text-sky-600" />}
@@ -1079,6 +1129,7 @@ export default function App() {
       {appMode === 'admin' && (
         <CollapsibleModule
           id="sectors"
+          hidden={!isSectoresTab}
           title="Sectores y Zonas de Trabajo Demarcadas"
           subtitle="Seguimiento individualizado por sectores geográficos del plano"
           icon={<Layers className="w-4 h-4 text-purple-600" />}
@@ -1106,6 +1157,7 @@ export default function App() {
       {appMode === 'admin' && (
         <CollapsibleModule
           id="summaryTable"
+          hidden={!isSectoresTab}
           title="Matriz Consolidada de Materiales por Sector"
           subtitle="Cuadro acumulado de tuberías, cables, calibres, metrajes y cámaras por zona"
           icon={<Grid className="w-4 h-4 text-indigo-600" />}
@@ -1137,6 +1189,7 @@ export default function App() {
         } flex flex-col gap-2`}>
           <CollapsibleModule
             id="canvas"
+            hidden={!isPlanosTab}
             title="Plano Interactivo & Herramientas de Inspección"
             subtitle="Cargue de plano en PDF/Imagen, demarcación de zonas y trazado"
             icon={<MapIcon className="w-4 h-4 text-blue-600" />}
@@ -1170,6 +1223,7 @@ export default function App() {
                 camDefaultType={camDefaultType}
                 onCamDefaultTypeChange={setCamDefaultType}
                 zoomLevel={zoomLevel}
+                  onZoomChange={setZoomLevel}
                 onZoomIn={() => setZoomLevel(z => Math.min(4.0, z * 1.25))}
                 onZoomOut={() => setZoomLevel(z => Math.max(0.3, z * 0.8))}
                 onZoomReset={() => setZoomLevel(1.0)}
@@ -1205,6 +1259,7 @@ export default function App() {
                 elements={elements}
                 areas={areas}
                 zoomLevel={zoomLevel}
+                  onZoomChange={setZoomLevel}
                 iconScale={iconScale}
                 showCameraLabels={showCameraLabels}
                 showLineLabels={showLineLabels}
@@ -1213,6 +1268,7 @@ export default function App() {
                 camPrefix={camPrefix}
                 camCounter={camCounter}
                 camDefaultType={camDefaultType}
+                isLocked={globalConfig.lockBlueprintLayout}
                 currentAreaPoints={currentAreaPoints}
                 onAddAreaPoint={handleAddAreaPoint}
                 onFinishArea={handleFinishArea}
@@ -1236,6 +1292,7 @@ export default function App() {
         } flex flex-col gap-2`}>
           <CollapsibleModule
             id="bitacora"
+            hidden={!isBitacoraTab}
             title="Bitácora de Registro y Control de Inspección"
             subtitle="Lista detallada de elementos, estado, actas, observaciones y fecha"
             icon={<ClipboardList className="w-4 h-4 text-teal-600" />}
@@ -1429,6 +1486,7 @@ export default function App() {
         projectMeta={projectMeta}
         blueprintImg={blueprintImg}
         onUpdateElement={handleUpdateElement}
+        onUpdateProjectMeta={setProjectMeta}
         showToast={showToast}
         initialShowImport={memoriaInitialImport}
       />
@@ -1441,6 +1499,28 @@ export default function App() {
         onImportElements={handleImportAiElements}
         showToast={showToast}
       />
+
+      {/* Mobile Bottom Navigation */}
+      {isMobile && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex items-center justify-around p-2 z-[100] pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+          <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center p-2 ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-slate-500'}`}>
+            <LayoutGrid className="w-5 h-5 mb-1" />
+            <span className="text-[10px] font-bold">Panel</span>
+          </button>
+          <button onClick={() => setActiveTab('sectores')} className={`flex flex-col items-center p-2 ${activeTab === 'sectores' ? 'text-blue-600' : 'text-slate-500'}`}>
+            <Building2 className="w-5 h-5 mb-1" />
+            <span className="text-[10px] font-bold">Sectores</span>
+          </button>
+          <button onClick={() => setActiveTab('planos')} className={`flex flex-col items-center p-2 ${activeTab === 'planos' ? 'text-blue-600' : 'text-slate-500'}`}>
+            <MapIcon className="w-5 h-5 mb-1" />
+            <span className="text-[10px] font-bold">Planos</span>
+          </button>
+          <button onClick={() => setActiveTab('bitacora')} className={`flex flex-col items-center p-2 ${activeTab === 'bitacora' ? 'text-blue-600' : 'text-slate-500'}`}>
+            <ClipboardList className="w-5 h-5 mb-1" />
+            <span className="text-[10px] font-bold">Bitácora</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

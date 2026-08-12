@@ -13,6 +13,7 @@ interface CollapsibleModuleProps {
   headerActions?: React.ReactNode;
   className?: string;
   headerBgClass?: string;
+  hidden?: boolean;
 }
 
 export const CollapsibleModule: React.FC<CollapsibleModuleProps> = ({
@@ -25,8 +26,10 @@ export const CollapsibleModule: React.FC<CollapsibleModuleProps> = ({
   children,
   headerActions,
   className = '',
-  headerBgClass = 'bg-white'
+  headerBgClass = 'bg-white',
+  hidden = false
 }) => {
+  if (hidden) return null;
   return (
     <div className={`transition-all duration-200 rounded-xl border border-slate-200 shadow-sm overflow-hidden ${className}`}>
       {/* Module Header Bar */}

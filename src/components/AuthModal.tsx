@@ -35,7 +35,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       const cleanEmail = quickEmail.trim();
       const lowerEmail = cleanEmail.toLowerCase();
-      const isTargetAdmin = lowerEmail === 'jheanmurillo73@gmail.com' || lowerEmail.includes('admin');
+      const isTargetAdmin = lowerEmail === 'jheanmurillo73@gmail.com' ;
 
       // Check if profile is inactive
       const profiles = await supabaseProfiles.fetchProfiles();
@@ -97,7 +97,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       const cleanEmail = email.trim();
       const lowerEmail = cleanEmail.toLowerCase();
-      const isTargetAdmin = lowerEmail === 'jheanmurillo73@gmail.com' || lowerEmail.includes('admin');
+      const isTargetAdmin = lowerEmail === 'jheanmurillo73@gmail.com' ;
 
       const profiles = await supabaseProfiles.fetchProfiles();
       const existingProf = profiles.find(p => p.email.toLowerCase() === lowerEmail);

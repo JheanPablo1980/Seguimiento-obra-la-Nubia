@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { InspectionElement, FilterState } from '../types';
 import { normalizeActa } from '../utils/actaUtils';
+import { calcularAvancePorCronograma } from '../utils/cronogramaUtils';
 import { Camera, Ruler, CalendarDays, TrendingUp, Filter, FileText, CheckCircle2, Clock, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface KpiMetricsProps {
@@ -117,7 +118,13 @@ export const KpiMetrics: React.FC<KpiMetricsProps> = ({
   const pendCount = filteredElements.filter(e => e.status === 'Pendiente').length;
 
   let progressPct = 0;
-  if (totalItems > 0) {
+  const avancesMap = calcularAvancePorCronograma(filteredElements);
+  const avanceValues = Object.values(avancesMap);
+  if (avanceValues.length > 0) {
+    const sum = avanceValues.reduce((acc, val) => acc + val, 0);
+    progressPct = Math.round(sum / avanceValues.length);
+  } else if (totalItems > 0) {
+    // Fallback if no elements match any schedule items
     progressPct = Math.round(((termCount + procCount * 0.5) / totalItems) * 100);
   }
 

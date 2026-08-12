@@ -17,6 +17,7 @@ interface BlueprintCanvasProps {
   elements: InspectionElement[];
   areas: AreaSector[];
   zoomLevel: number;
+  onZoomChange?: (zoom: number) => void;
   iconScale?: number;
   showCameraLabels: boolean;
   showLineLabels: boolean;
@@ -25,6 +26,7 @@ interface BlueprintCanvasProps {
   camPrefix: string;
   camCounter: number;
   camDefaultType: CameraNorm;
+  isLocked?: boolean;
   // Area drawing state
   currentAreaPoints: Point[];
   onAddAreaPoint: (point: Point) => void;
@@ -45,6 +47,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   elements,
   areas,
   zoomLevel,
+  onZoomChange,
   iconScale = 1.6,
   showCameraLabels,
   showLineLabels,
@@ -53,6 +56,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   camPrefix,
   camCounter,
   camDefaultType,
+  isLocked = false,
   currentAreaPoints,
   onAddAreaPoint,
   onFinishArea,
@@ -81,6 +85,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     origX2?: number;
     origY2?: number;
     hasMoved: boolean;
+    currentDx?: number;
+    currentDy?: number;
   } | null>(null);
   const [hoveredElementInfo, setHoveredElementInfo] = useState<{ id: number; part: string } | null>(null);
   const [isDraggingElement, setIsDraggingElement] = useState(false);
@@ -89,7 +95,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   const [isDrawing, setIsDrawing] = useState(false);
   const currentPathRef = useRef<Point[]>([]);
   const straightLineStartRef = useRef<Point | null>(null);
-  const [straightLinePreview, setStraightLinePreview] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const straightLinePreviewRef = useRef<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   const [areaMousePos, setAreaMousePos] = useState<Point | null>(null);
 
   const SNAP_RADIUS = 25;
@@ -792,7 +798,34 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     }
 
     // 6. Inspection Elements (Conduit lines & Cameras)
-    elements.forEach(el => {
+    elements.forEach(baseEl => {
+      // Apply real-time drag offsets if this element is currently being dragged
+      let el = baseEl;
+      if (draggedElementRef.current && draggedElementRef.current.id === baseEl.id) {
+        const drag = draggedElementRef.current;
+        const dx = drag.currentDx || 0;
+        const dy = drag.currentDy || 0;
+        
+        el = { ...baseEl };
+        if (drag.part === 'camera') {
+          el.x = drag.origX + dx;
+          el.y = drag.origY + dy;
+        } else if (drag.part === 'line-start') {
+          el.x = drag.origX + dx;
+          el.y = drag.origY + dy;
+        } else if (drag.part === 'line-end') {
+          el.x2 = (drag.origX2 ?? 0) + dx;
+          el.y2 = (drag.origY2 ?? 0) + dy;
+        } else if (drag.part === 'line-body') {
+          el.x = drag.origX + dx;
+          el.y = drag.origY + dy;
+          if (el.x2 !== undefined && el.y2 !== undefined) {
+            el.x2 = (drag.origX2 ?? 0) + dx;
+            el.y2 = (drag.origY2 ?? 0) + dy;
+          }
+        }
+      }
+
       let colorHex = '#94a3b8'; // Pendiente
       if (el.status === 'En proceso') colorHex = '#f59e0b';
       if (el.status === 'Terminado') colorHex = '#10b981';
@@ -825,11 +858,12 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     });
 
     // 7. Straight Line Preview
-    if (isDrawing && currentTool === 'straight' && straightLinePreview) {
+    const straightPreview = straightLinePreviewRef.current;
+    if (isDrawing && currentTool === 'straight' && straightPreview) {
       ctx.save();
       ctx.beginPath();
-      ctx.moveTo(straightLinePreview.x1, straightLinePreview.y1);
-      ctx.lineTo(straightLinePreview.x2, straightLinePreview.y2);
+      ctx.moveTo(straightPreview.x1, straightPreview.y1);
+      ctx.lineTo(straightPreview.x2, straightPreview.y2);
       ctx.strokeStyle = '#38bdf8';
       ctx.lineWidth = 4;
       ctx.setLineDash([6, 4]);
@@ -840,11 +874,38 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
     // 8. Interactive Drag Handles / Active Selection Highlight in Pan Mode
     if (currentTool === 'pan') {
-      elements.forEach(el => {
-        const isHovered = hoveredElementInfo?.id === el.id;
-        const isDragged = draggedElementRef.current?.id === el.id;
+      elements.forEach(baseEl => {
+        const isHovered = hoveredElementInfo?.id === baseEl.id;
+        const isDragged = draggedElementRef.current?.id === baseEl.id;
 
         if (isHovered || isDragged) {
+          // Apply real-time drag offsets if this element is currently being dragged
+          let el = baseEl;
+          if (isDragged && draggedElementRef.current) {
+            const drag = draggedElementRef.current;
+            const dx = drag.currentDx || 0;
+            const dy = drag.currentDy || 0;
+            
+            el = { ...baseEl };
+            if (drag.part === 'camera') {
+              el.x = drag.origX + dx;
+              el.y = drag.origY + dy;
+            } else if (drag.part === 'line-start') {
+              el.x = drag.origX + dx;
+              el.y = drag.origY + dy;
+            } else if (drag.part === 'line-end') {
+              el.x2 = (drag.origX2 ?? 0) + dx;
+              el.y2 = (drag.origY2 ?? 0) + dy;
+            } else if (drag.part === 'line-body') {
+              el.x = drag.origX + dx;
+              el.y = drag.origY + dy;
+              if (el.x2 !== undefined && el.y2 !== undefined) {
+                el.x2 = (drag.origX2 ?? 0) + dx;
+                el.y2 = (drag.origY2 ?? 0) + dy;
+              }
+            }
+          }
+
           ctx.save();
           if (el.type === 'camera') {
             const rad = Math.max((el.size || 10) + 6, 18) * iconScale + 4;
@@ -904,7 +965,6 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     showLineLabels,
     showCameraLabels,
     showSpecsLabels,
-    straightLinePreview,
     drawCameraBadge,
     drawLineElement,
     iconScale,
@@ -974,6 +1034,73 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   }, [blueprintImg]);
 
   // Mouse / Touch Event Handlers
+  
+  const activePointers = useRef(new Map<number, {x: number, y: number}>());
+  const initialPinchDist = useRef<number | null>(null);
+  const initialZoomLevel = useRef(zoomLevel);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (e.target) e.target.setPointerCapture(e.pointerId);
+
+    if (activePointers.current.size === 2) {
+      setIsPanning(false); // Stop panning
+      setIsDrawing(false); // Stop drawing
+      
+      const pts = Array.from(activePointers.current.values()) as any[];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      initialPinchDist.current = dist;
+      initialZoomLevel.current = zoomLevel;
+      return;
+    }
+
+    if (activePointers.current.size === 1) {
+      handleMouseDown(e.clientX, e.clientY);
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (activePointers.current.has(e.pointerId)) {
+      activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    if (activePointers.current.size === 2) {
+      const pts = Array.from(activePointers.current.values()) as any[];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      
+      if (initialPinchDist.current && onZoomChange) {
+        const zoomDelta = dist / initialPinchDist.current;
+        let newZoom = initialZoomLevel.current * zoomDelta;
+        newZoom = Math.min(Math.max(newZoom, 0.3), 4.0);
+        onZoomChange(newZoom);
+      }
+      return;
+    }
+
+    if (activePointers.current.size === 1 || activePointers.current.size === 0) {
+      handleMouseMove(e.clientX, e.clientY);
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    activePointers.current.delete(e.pointerId);
+    if (e.target && e.target.hasPointerCapture(e.pointerId)) {
+      e.target.releasePointerCapture(e.pointerId);
+    }
+    
+    if (activePointers.current.size < 2) {
+      initialPinchDist.current = null;
+    }
+    
+    if (activePointers.current.size === 0) {
+      handleMouseUp();
+    }
+  };
+
+  const handlePointerCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    handlePointerUp(e);
+  };
+
   const handleMouseDown = (clientX: number, clientY: number) => {
     const pos = getCanvasCoords(clientX, clientY);
 
@@ -996,14 +1123,15 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
       setIsPanning(true);
       startPanRef.current = { x: pos.rawX - panX, y: pos.rawY - panY };
-    } else if (currentTool === 'highlight') {
+    } else if (currentTool === 'highlight' && !isLocked) {
       setIsDrawing(true);
       currentPathRef.current = [{ x: pos.x, y: pos.y }];
-    } else if (currentTool === 'straight') {
+    } else if (currentTool === 'straight' && !isLocked) {
       setIsDrawing(true);
       straightLineStartRef.current = { x: pos.x, y: pos.y };
-      setStraightLinePreview({ x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y });
-    } else if (currentTool === 'camera') {
+      straightLinePreviewRef.current = { x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y };
+      redraw();
+    } else if (currentTool === 'camera' && !isLocked) {
       const camLabel = `${camPrefix}${String(camCounter).padStart(2, '0')}`;
       const newEl: InspectionElement = {
         id: Date.now() + Math.floor(Math.random() * 100000),
@@ -1019,7 +1147,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         date: new Date().toISOString().split('T')[0]
       };
       onAddElement(newEl);
-    } else if (currentTool === 'area') {
+    } else if (currentTool === 'area' && !isLocked) {
       if (currentAreaPoints.length >= 3) {
         const startPt = currentAreaPoints[0];
         const distToStart = Math.hypot(pos.x - startPt.x, pos.y - startPt.y);
@@ -1029,7 +1157,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         }
       }
       onAddAreaPoint({ x: pos.x, y: pos.y });
-    } else if (currentTool === 'eraser') {
+    } else if (currentTool === 'eraser' && !isLocked) {
       setIsDrawing(true);
       onEraseAt({ x: pos.x, y: pos.y });
     }
@@ -1048,44 +1176,15 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       const dx = pos.x - drag.startCanvasPos.x;
       const dy = pos.y - drag.startCanvasPos.y;
 
-      if (Math.hypot(dx, dy) > 3) {
+      if (!isLocked && Math.hypot(dx, dy) > 3) {
         drag.hasMoved = true;
       }
-
-      const targetEl = elements.find(e => e.id === drag.id);
-      if (targetEl && onUpdateElement) {
-        const updated: InspectionElement = { ...targetEl };
-
-        if (drag.part === 'camera') {
-          updated.x = Math.round(drag.origX + dx);
-          updated.y = Math.round(drag.origY + dy);
-        } else if (drag.part === 'line-start') {
-          const newX = Math.round(drag.origX + dx);
-          const newY = Math.round(drag.origY + dy);
-          updated.x = newX;
-          updated.y = newY;
-          if (updated.x2 !== undefined && updated.y2 !== undefined) {
-            const distPx = Math.hypot(updated.x2 - newX, updated.y2 - newY);
-            updated.meters = Math.max(1, Math.round(distPx / 15));
-          }
-        } else if (drag.part === 'line-end') {
-          const newX2 = Math.round((drag.origX2 ?? 0) + dx);
-          const newY2 = Math.round((drag.origY2 ?? 0) + dy);
-          updated.x2 = newX2;
-          updated.y2 = newY2;
-          const distPx = Math.hypot(newX2 - updated.x, newY2 - updated.y);
-          updated.meters = Math.max(1, Math.round(distPx / 15));
-        } else if (drag.part === 'line-body') {
-          updated.x = Math.round(drag.origX + dx);
-          updated.y = Math.round(drag.origY + dy);
-          if (drag.origX2 !== undefined && drag.origY2 !== undefined) {
-            updated.x2 = Math.round(drag.origX2 + dx);
-            updated.y2 = Math.round(drag.origY2 + dy);
-          }
-        }
-
-        onUpdateElement(updated);
+      
+      if (!isLocked) {
+        drag.currentDx = dx;
+        drag.currentDy = dy;
       }
+      redraw();
       return;
     }
 
@@ -1106,12 +1205,13 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       currentPathRef.current.push({ x: pos.x, y: pos.y });
       redraw();
     } else if (isDrawing && currentTool === 'straight' && straightLineStartRef.current) {
-      setStraightLinePreview({
+      straightLinePreviewRef.current = {
         x1: straightLineStartRef.current.x,
         y1: straightLineStartRef.current.y,
         x2: pos.x,
         y2: pos.y
-      });
+      };
+      redraw();
     } else if (isDrawing && currentTool === 'eraser') {
       onEraseAt({ x: pos.x, y: pos.y });
     }
@@ -1126,9 +1226,47 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         if (hitEl) {
           onInspectElement(hitEl);
         }
+      } else if (onUpdateElement) {
+        // Apply final position update
+        const targetEl = elements.find(e => e.id === drag.id);
+        if (targetEl) {
+          const updated: InspectionElement = { ...targetEl };
+          const dx = drag.currentDx || 0;
+          const dy = drag.currentDy || 0;
+
+          if (drag.part === 'camera') {
+            updated.x = Math.round(drag.origX + dx);
+            updated.y = Math.round(drag.origY + dy);
+          } else if (drag.part === 'line-start') {
+            const newX = Math.round(drag.origX + dx);
+            const newY = Math.round(drag.origY + dy);
+            updated.x = newX;
+            updated.y = newY;
+            if (updated.x2 !== undefined && updated.y2 !== undefined) {
+              const distPx = Math.hypot(updated.x2 - newX, updated.y2 - newY);
+              updated.meters = Math.max(1, Math.round(distPx / 15));
+            }
+          } else if (drag.part === 'line-end') {
+            const newX2 = Math.round((drag.origX2 ?? 0) + dx);
+            const newY2 = Math.round((drag.origY2 ?? 0) + dy);
+            updated.x2 = newX2;
+            updated.y2 = newY2;
+            const distPx = Math.hypot(newX2 - updated.x, newY2 - updated.y);
+            updated.meters = Math.max(1, Math.round(distPx / 15));
+          } else if (drag.part === 'line-body') {
+            updated.x = Math.round(drag.origX + dx);
+            updated.y = Math.round(drag.origY + dy);
+            if (drag.origX2 !== undefined && drag.origY2 !== undefined) {
+              updated.x2 = Math.round(drag.origX2 + dx);
+              updated.y2 = Math.round(drag.origY2 + dy);
+            }
+          }
+          onUpdateElement(updated);
+        }
       }
       draggedElementRef.current = null;
       setIsDraggingElement(false);
+      redraw();
     }
     if (isPanning) {
       setIsPanning(false);
@@ -1141,9 +1279,10 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           color: 'rgba(250, 204, 21, 0.45)',
           width: 12
         });
-      } else if (currentTool === 'straight' && straightLineStartRef.current && straightLinePreview) {
-        const dx = straightLinePreview.x2 - straightLineStartRef.current.x;
-        const dy = straightLinePreview.y2 - straightLineStartRef.current.y;
+      } else if (currentTool === 'straight' && straightLineStartRef.current && straightLinePreviewRef.current) {
+        const preview = straightLinePreviewRef.current;
+        const dx = preview.x2 - straightLineStartRef.current.x;
+        const dy = preview.y2 - straightLineStartRef.current.y;
         if (Math.hypot(dx, dy) > 10) {
           const lineCount = elements.filter(e => e.type === 'line').length + 1;
           const label = `Tramo T-${String(lineCount).padStart(2, '0')}`;
@@ -1155,8 +1294,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
             status: 'Pendiente',
             x: straightLineStartRef.current.x,
             y: straightLineStartRef.current.y,
-            x2: straightLinePreview.x2,
-            y2: straightLinePreview.y2,
+            x2: preview.x2,
+            y2: preview.y2,
             meters: approxMeters,
             pipes: '6x6" PVC Schedule 40',
             cables: '3#250 F+1#500N+1#6T',
@@ -1167,8 +1306,9 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       }
       setIsDrawing(false);
       straightLineStartRef.current = null;
-      setStraightLinePreview(null);
+      straightLinePreviewRef.current = null;
       currentPathRef.current = [];
+      redraw();
     }
   };
 
@@ -1250,10 +1390,11 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
       <canvas
         ref={canvasRef}
+        style={{ touchAction: 'none' }}
         className={`block max-w-full max-h-full object-contain ${getCursorClass()}`}
-        onMouseDown={(e) => handleMouseDown(e.clientX, e.clientY)}
-        onMouseMove={(e) => handleMouseMove(e.clientX, e.clientY)}
-        onMouseUp={handleMouseUp}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp} onPointerCancel={handlePointerCancel}
         onMouseLeave={() => {
           setAreaMousePos(null);
           handleMouseUp();

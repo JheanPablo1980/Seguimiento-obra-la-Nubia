@@ -2,6 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { ScheduleItem, InspectionElement, AreaSector, AuthUser } from '../types';
 import { INITIAL_SCHEDULE_ITEMS, DEFAULT_CONTRACTUAL_ITEMS } from '../data/sampleData';
 import { normalizeActa, getAvailableActas } from '../utils/actaUtils';
+import { detectColumnMapping, applyMappingToRows, REQUIRED_FIELDS, HEADER_ALIASES } from '../utils/importUtils';
+import { calcularAvancePorCronograma } from '../utils/cronogramaUtils';
 import { 
   X, 
   CalendarCheck, 
@@ -82,6 +84,33 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
   const [pastedCsvText, setPastedCsvText] = useState('');
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
   const [parsedPreviewItems, setParsedPreviewItems] = useState<ScheduleItem[]>([]);
+  const [importMapping, setImportMapping] = useState<{ headers: string[], rows: string[][], mapping: Record<string, string>, step: 'summary' | 'review' } | null>(null);
+  const [savedTemplates, setSavedTemplates] = useState<Record<string, Record<string, string>>>({});
+  
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('cronogramaMappingTemplates');
+      if (saved) setSavedTemplates(JSON.parse(saved));
+    } catch(e) {}
+  }, []);
+  
+  const saveMappingTemplate = () => {
+    const name = window.prompt('Nombre de la plantilla de mapeo: (ej. Microsoft Project, Cronograma Contratista A)');
+    if (name && importMapping) {
+      const newTemplates = { ...savedTemplates, [name]: importMapping.mapping };
+      setSavedTemplates(newTemplates);
+      localStorage.setItem('cronogramaMappingTemplates', JSON.stringify(newTemplates));
+      showToast('Plantilla de mapeo guardada');
+    }
+  };
+  
+  const loadMappingTemplate = (name: string) => {
+    if (savedTemplates[name] && importMapping) {
+      setImportMapping({ ...importMapping, mapping: savedTemplates[name] });
+      showToast('Plantilla de mapeo cargada');
+    }
+  };
+
   const [dragActive, setDragActive] = useState(false);
 
   // Helper point in polygon for sector name detection
@@ -106,16 +135,18 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
 
   // Auto-detect & calculate progress for each schedule item
   const progressMap = useMemo(() => {
+    const avances = calcularAvancePorCronograma(elements);
     const map: Record<string, {
       executed: number;
       inProgress: number;
       pending: number;
       count: number;
+      completionPercent: number;
       elements: InspectionElement[];
     }> = {};
 
     scheduleItems.forEach(item => {
-      map[item.id] = { executed: 0, inProgress: 0, pending: 0, count: 0, elements: [] };
+      map[item.id] = { executed: 0, inProgress: 0, pending: 0, count: 0, completionPercent: 0, elements: [] };
     });
 
     elements.forEach(el => {
@@ -151,6 +182,10 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
       }
     });
 
+    // Populate completionPercent
+    Object.keys(map).forEach(key => {
+      map[key].completionPercent = avances[key] || 0;
+    });
     return map;
   }, [scheduleItems, elements]);
 
@@ -171,7 +206,15 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
       }
     });
 
-    const globalPct = totalTarget > 0 ? Math.min(100, (totalExecuted / totalTarget) * 100) : 0;
+    let sumPcts = 0;
+    let countPcts = 0;
+    scheduleItems.forEach(item => {
+      if (progressMap[item.id] && progressMap[item.id].completionPercent !== undefined) {
+        sumPcts += progressMap[item.id].completionPercent;
+        countPcts++;
+      }
+    });
+    const globalPct = countPcts > 0 ? (sumPcts / countPcts) : 0;
     const entrega1Pct = totalEntrega1 > 0 ? Math.min(100, (totalExecuted / totalEntrega1) * 100) : 0;
 
     return {
@@ -358,95 +401,22 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
     setEntrega2Target(40);
   };
 
-  // Helper function to parse CSV/TSV text into ScheduleItem array
-  const parseCsvToScheduleItems = (text: string): ScheduleItem[] => {
+  const startCsvMapping = (text: string) => {
     const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-    if (lines.length === 0) return [];
-
-    const items: ScheduleItem[] = [];
-
-    // Check if first line is header
-    const firstLineLower = lines[0].toLowerCase();
-    const hasHeader = firstLineLower.includes('codigo') || firstLineLower.includes('código') || firstLineLower.includes('descripcion') || firstLineLower.includes('descripción') || firstLineLower.includes('item') || firstLineLower.includes('rubro');
-    const startIdx = hasHeader ? 1 : 0;
-
-    for (let i = startIdx; i < lines.length; i++) {
-      const line = lines[i];
-      // Split by tab, comma or semicolon (handling quotes)
-      const parts = line.includes('\t')
-        ? line.split('\t').map(p => p.trim().replace(/^"|"$/g, ''))
-        : line.split(/[,;](?=(?:(?:[^"]*"){2})*[^"]*$)/).map(p => p.trim().replace(/^"|"$/g, ''));
-
-      if (parts.length < 2) continue;
-
-      const codeVal = parts[0] || `RUB-${i + 1}`;
-      const descVal = parts[1] || `Rubro ${i + 1}`;
-      const qtyVal = Number(parts[2]) || 100;
-      const unitRaw = (parts[3] || 'mts').toLowerCase();
-      let unitVal: 'mts' | 'unidades' | 'tramos' | 'm²' = 'mts';
-      if (unitRaw.includes('unidad') || unitRaw.includes('un') || unitRaw === 'u') unitVal = 'unidades';
-      else if (unitRaw.includes('tramo')) unitVal = 'tramos';
-      else if (unitRaw.includes('m2') || unitRaw.includes('m²')) unitVal = 'm²';
-
-      const e1Val = Number(parts[4]) || Math.round(qtyVal * 0.6);
-      const e2Val = Number(parts[5]) || Math.max(0, qtyVal - e1Val);
-      const deadlineVal = parts[6] || '01/08/2026';
-      
-      const catRaw = (parts[7] || '').toLowerCase();
-      let catVal: 'tuberia' | 'camara' | 'sector' | 'general' = 'tuberia';
-      if (catRaw.includes('camara') || catRaw.includes('cámara') || codeVal.toLowerCase().includes('cam')) catVal = 'camara';
-      else if (catRaw.includes('sector')) catVal = 'sector';
-      else if (catRaw.includes('general')) catVal = 'general';
-
-      items.push({
-        id: codeVal,
-        code: codeVal,
-        description: descVal,
-        targetQuantity: qtyVal,
-        unit: unitVal,
-        entrega1Target: e1Val,
-        entrega1Label: 'Entrega 1 - Últ. semana Jul 2026',
-        entrega2Target: e2Val,
-        entrega2Label: 'Entrega 2 - Agosto 2026',
-        finalDeadline: deadlineVal,
-        category: catVal
-      });
+    if (lines.length < 2) {
+      alert('El archivo no tiene suficientes filas.');
+      return;
     }
 
-    return items;
-  };
+    const parseLine = (line: string) => line.includes('\t')
+      ? line.split('\t').map(p => p.trim().replace(/^"|"$/g, ''))
+      : line.split(/[,;](?=(?:(?:[^"]*"){2})*[^"]*$)/).map(p => p.trim().replace(/^"|"$/g, ''));
 
-  const handleFileUpload = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      if (!content) return;
-
-      if (file.name.endsWith('.json')) {
-        try {
-          const parsed = JSON.parse(content);
-          const rawItems = Array.isArray(parsed) ? parsed : (parsed.scheduleItems || parsed.items || []);
-          if (Array.isArray(rawItems) && rawItems.length > 0) {
-            setParsedPreviewItems(rawItems);
-            showToast(`Se cargaron ${rawItems.length} rubros desde archivo JSON`);
-          } else {
-            alert('El archivo JSON no contiene una lista válida de rubros de cronograma.');
-          }
-        } catch (err) {
-          alert('Error al leer JSON: ' + (err as Error).message);
-        }
-      } else {
-        // CSV / TSV / TXT
-        const items = parseCsvToScheduleItems(content);
-        if (items.length > 0) {
-          setParsedPreviewItems(items);
-          showToast(`Se procesaron ${items.length} rubros del archivo ${file.name}`);
-        } else {
-          alert('No se pudieron extraer rubros válidos. Verifica el formato del CSV.');
-        }
-      }
-    };
-    reader.readAsText(file);
+    const headers = parseLine(lines[0]);
+    const rows = lines.slice(1).map(parseLine).filter(r => r.length >= 2);
+    
+    const detectedMapping = detectColumnMapping(headers);
+    setImportMapping({ headers, rows, mapping: detectedMapping, step: 'summary' });
   };
 
   const handleProcessPastedText = () => {
@@ -454,13 +424,47 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
       alert('Por favor pega texto en formato CSV o tabla de Excel');
       return;
     }
-    const items = parseCsvToScheduleItems(pastedCsvText);
-    if (items.length > 0) {
-      setParsedPreviewItems(items);
-      showToast(`¡Se extrajeron ${items.length} rubros correctamente!`);
-    } else {
-      alert('No se detectaron rubros. Asegúrate de incluir Código y Descripción en cada línea.');
+    startCsvMapping(pastedCsvText);
+  };
+
+  const handleApplyMapping = () => {
+    if (!importMapping) return;
+    
+    // Check required fields
+    const mappedValues = Object.values(importMapping.mapping);
+    if (!mappedValues.includes('idUnicoCrono') || !mappedValues.includes('task')) {
+      alert('ERROR:\nNo se encontró un identificador único de actividad (ID_UNICO_CRONO) o Actividad (Task).\nPor favor mapéalos manualmente.');
+      return;
     }
+
+    const mappedRows = applyMappingToRows(importMapping.headers, importMapping.rows, importMapping.mapping);
+    
+    const items: ScheduleItem[] = mappedRows.map((r: any, i) => {
+      // Default extraction to maintain backward compatibility for old tools if fields are missing
+      const idUnico = r.idUnicoCrono || `RUB-${i + 1}`;
+      const description = r.task || `Rubro ${i + 1}`;
+      return {
+        id: idUnico,
+        code: idUnico,
+        description: description,
+        targetQuantity: 100, // Dummy defaults if they didn't map them
+        unit: 'mts',
+        entrega1Target: 60,
+        entrega2Target: 40,
+        duracion: r.duracion,
+        start: r.start,
+        finish: r.finish,
+        porcentajeCompletado: r.porcentajeCompletado,
+        comienzoLineaBase: r.comienzoLineaBase,
+        finLineaBase: r.finLineaBase,
+        duracionLineaBase: r.duracionLineaBase,
+        rawExtras: r.rawExtras
+      } as ScheduleItem;
+    });
+
+    setParsedPreviewItems(items);
+    setImportMapping(null);
+    showToast(`CRONOGRAMA DETECTADO: ¡Se extrajeron ${items.length} actividades correctamente!`);
   };
 
   const handleApplyImport = () => {
@@ -483,6 +487,26 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
     setParsedPreviewItems([]);
     setPastedCsvText('');
     setActiveTab('matrix');
+  };
+
+  const handleFileUpload = (file: File) => {
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const content = evt.target?.result as string;
+      if (file.name.endsWith('.json')) {
+        try {
+          const items = JSON.parse(content);
+          setParsedPreviewItems(items);
+          showToast(`Se procesaron ${items.length} rubros desde JSON`);
+        } catch (err) {
+          alert('Error al leer JSON: ' + (err as Error).message);
+        }
+      } else {
+        startCsvMapping(content);
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleLoadDefaultTemplate = () => {
@@ -617,6 +641,15 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            
+            <button
+              onClick={() => setActiveTab('import')}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 shadow-sm"
+              title="Cargar cronograma desde Excel/CSV"
+            >
+              <Upload className="w-3.5 h-3.5 text-indigo-200" />
+              <span>📋 Cargar Cronograma (CSV)</span>
+            </button>
             <button
               onClick={handleExportConsolidatedActasCSV}
               className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 shadow-sm"
@@ -676,8 +709,8 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                   </thead>
                   <tbody className="divide-y divide-slate-800/80">
                     {filteredItems.map(item => {
-                      const prog = progressMap[item.id] || { executed: 0, inProgress: 0, pending: 0, count: 0 };
-                      const pctGlobal = item.targetQuantity > 0 ? Math.round((prog.executed / item.targetQuantity) * 100) : 0;
+                      const prog = progressMap[item.id] || { executed: 0, inProgress: 0, pending: 0, count: 0, completionPercent: 0 };
+                      const pctGlobal = Math.round((prog.completionPercent || 0) * 100) / 100;
                       const pctE1 = item.entrega1Target > 0 ? Math.round((prog.executed / item.entrega1Target) * 100) : 0;
 
                       return (
@@ -1196,6 +1229,158 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
 
               </div>
 
+                            {/* Mapping UI */}
+              {importMapping && (
+                <div className="p-4 bg-slate-950 rounded-xl border border-sky-500/40 space-y-4 animate-in fade-in">
+                  
+                  {importMapping.step === 'summary' ? (
+                    <div className="space-y-4">
+                      <div className="border-b border-slate-800 pb-3">
+                        <h4 className="text-sm font-bold text-sky-400 uppercase">CRONOGRAMA DETECTADO</h4>
+                      </div>
+                      <div className="text-slate-200 text-xs space-y-1">
+                        <p className="font-bold text-emerald-400">✓ {importMapping.rows.length} actividades encontradas</p>
+                        
+                        {Object.values(importMapping.mapping).includes('idUnicoCrono') ? <p>✓ ID_UNICO_CRONO identificado</p> : <p className="text-red-400">✗ ID_UNICO_CRONO NO identificado</p>}
+                        {Object.values(importMapping.mapping).includes('task') ? <p>✓ Actividad identificada</p> : <p className="text-red-400">✗ Actividad NO identificada</p>}
+                        {Object.values(importMapping.mapping).includes('duracion') && <p>✓ Duración identificada</p>}
+                        {Object.values(importMapping.mapping).includes('start') && <p>✓ Inicio identificado</p>}
+                        {Object.values(importMapping.mapping).includes('finish') && <p>✓ Fin identificado</p>}
+                        {Object.values(importMapping.mapping).includes('porcentajeCompletado') && <p>✓ Porcentaje completado identificado</p>}
+                        {Object.values(importMapping.mapping).includes('comienzoLineaBase') && <p>✓ Línea base identificada</p>}
+                        
+                        <p className="mt-3 text-slate-400">
+                          Idioma detectado: {importMapping.headers.some(h => h.toLowerCase().includes('task') || h.toLowerCase().includes('finish')) ? 'Inglés / Mixto' : 'Español'}
+                        </p>
+                        <p className="text-slate-400">
+                          Columnas adicionales: {importMapping.headers.length - Object.keys(importMapping.mapping).length}
+                        </p>
+                      </div>
+
+                      <div className="flex justify-between items-center pt-2">
+                        <button
+                          onClick={() => setImportMapping(null)}
+                          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition"
+                        >
+                          Cancelar
+                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setImportMapping({...importMapping, step: 'review'})}
+                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-bold transition"
+                          >
+                            [ REVISAR MAPEO ]
+                          </button>
+                          <button
+                            onClick={handleApplyMapping}
+                            className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5"
+                          >
+                            <Check className="w-4 h-4" />
+                            [ IMPORTAR ]
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div>
+                      <h4 className="text-xs font-bold text-sky-400">MAPEO DE COLUMNAS (CRONOGRAMA DETECTADO)</h4>
+                      <p className="text-[11px] text-slate-400">Revisa y ajusta la relación entre los encabezados del archivo y los campos del sistema.</p>
+                      <p className="text-[10px] text-emerald-400 font-bold mt-1">✓ {importMapping.rows.length} actividades encontradas</p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-900 border-b border-slate-800 text-slate-400">
+                          <th className="p-2 font-bold uppercase">Encabezado encontrado</th>
+                          <th className="p-2 font-bold uppercase">Campo del sistema</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importMapping.headers.map((header, idx) => {
+                          const mappedTo = importMapping.mapping[idx.toString()];
+                          const isRequired = mappedTo === 'idUnicoCrono' || mappedTo === 'task';
+                          return (
+                            <tr key={idx} className="border-b border-slate-800 hover:bg-slate-900/50">
+                              <td className="p-2 font-mono text-slate-300">
+                                {header || `(Columna ${idx + 1})`}
+                              </td>
+                              <td className="p-2">
+                                <select
+                                  value={mappedTo || 'ignore'}
+                                  onChange={(e) => {
+                                    setImportMapping({
+                                      ...importMapping,
+                                      mapping: { ...importMapping.mapping, [idx.toString()]: e.target.value }
+                                    });
+                                  }}
+                                  className={`w-full bg-slate-900 border rounded-lg px-2 py-1 text-xs ${isRequired ? 'border-amber-500/50 text-amber-300 font-bold' : 'border-slate-700 text-slate-200'}`}
+                                >
+                                  <option value="ignore">-- Ignorar (Columna Adicional) --</option>
+                                  <option value="idUnicoCrono">ID_UNICO_CRONO ✓</option>
+                                  <option value="task">Task / Actividad ✓</option>
+                                  <option value="duracion">Duración ✓</option>
+                                  <option value="start">Start / Inicio ✓</option>
+                                  <option value="finish">Finish / Fin ✓</option>
+                                  <option value="porcentajeCompletado">% completado ✓</option>
+                                  <option value="comienzoLineaBase">Línea base inicio ✓</option>
+                                  <option value="finLineaBase">Línea base fin ✓</option>
+                                  <option value="duracionLineaBase">Línea base duración ✓</option>
+                                </select>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-between items-center pt-2">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setImportMapping(null)}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={saveMappingTemplate}
+                        className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-lg text-xs font-bold transition"
+                        title="Guardar plantilla de mapeo"
+                      >
+                        Guardar Plantilla
+                      </button>
+                      {Object.keys(savedTemplates).length > 0 && (
+                        <select 
+                          onChange={(e) => {
+                            if (e.target.value) loadMappingTemplate(e.target.value);
+                            e.target.value = '';
+                          }}
+                          className="bg-slate-800 text-slate-300 text-xs rounded-lg px-2 border border-slate-700"
+                        >
+                          <option value="">Cargar Plantilla...</option>
+                          {Object.keys(savedTemplates).map(t => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleApplyMapping}
+                      className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5"
+                    >
+                      <Check className="w-4 h-4" />
+                      REVISAR MAPEO E IMPORTAR
+                    </button>
+                  </div>
+                  </>
+                  )}
+                </div>
+              )}
+
               {/* Parsed Items Preview & Import Options */}
               {parsedPreviewItems.length > 0 && (
                 <div className="p-4 bg-slate-950 rounded-xl border border-amber-500/40 space-y-3 animate-in fade-in">
@@ -1236,12 +1421,13 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
                         <tr className="bg-slate-900 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                          <th className="p-2">Código</th>
-                          <th className="p-2">Descripción</th>
-                          <th className="p-2 text-center">Meta Total</th>
-                          <th className="p-2 text-center">Entrega 1</th>
-                          <th className="p-2 text-center">Entrega 2</th>
-                          <th className="p-2 text-center">Fecha Límite</th>
+                          <th className="p-2 border-r border-slate-800">ID_UNICO_CRONO</th>
+                          <th className="p-2 border-r border-slate-800">Task</th>
+                          <th className="p-2 text-center border-r border-slate-800">Inicio</th>
+                          <th className="p-2 text-center border-r border-slate-800">Fin</th>
+                          <th className="p-2 text-center border-r border-slate-800">Duración</th>
+                          <th className="p-2 text-center border-r border-slate-800">% Completado</th>
+                          <th className="p-2 text-center">Límite (Legacy)</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800 font-mono text-[11px]">
@@ -1249,10 +1435,11 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                           <tr key={idx} className="hover:bg-slate-900/60">
                             <td className="p-2 font-bold text-amber-300">{item.code}</td>
                             <td className="p-2 text-white font-sans">{item.description}</td>
-                            <td className="p-2 text-center text-emerald-400 font-bold">{item.targetQuantity} {item.unit}</td>
-                            <td className="p-2 text-center text-sky-300">{item.entrega1Target}</td>
-                            <td className="p-2 text-center text-indigo-300">{item.entrega2Target}</td>
-                            <td className="p-2 text-center text-slate-300">{item.finalDeadline}</td>
+                            <td className="p-2 text-center text-sky-300">{item.start || '-'}</td>
+                            <td className="p-2 text-center text-indigo-300">{item.finish || '-'}</td>
+                            <td className="p-2 text-center text-emerald-400 font-bold">{item.duracion || '-'}</td>
+                            <td className="p-2 text-center text-amber-400 font-bold">{item.porcentajeCompletado !== undefined ? `${item.porcentajeCompletado}%` : '-'}</td>
+                            <td className="p-2 text-center text-slate-400 text-[10px]">{item.finalDeadline || '-'}</td>
                           </tr>
                         ))}
                       </tbody>

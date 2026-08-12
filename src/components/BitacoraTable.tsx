@@ -1,5 +1,6 @@
-import React from 'react';
-import { InspectionElement, FilterState, StatusType, CameraNorm, GlobalConfig } from '../types';
+import React, { useState, useEffect } from 'react';
+import { InspectionElement, FilterState, StatusType, CameraNorm, GlobalConfig, ContractualItem } from '../types';
+import { formatExecutionTime } from '../utils/timeUtils';
 import { adjustTramoMeters } from '../utils/tramoUtils';
 import { normalizeActa, getAvailableActas } from '../utils/actaUtils';
 import { 
@@ -44,6 +45,27 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
   getAreaNameForElement,
   globalConfig
 }) => {
+  const [contractItems, setContractItems] = useState<ContractualItem[]>([]);
+
+  useEffect(() => {
+    const loadItems = () => {
+      const saved = localStorage.getItem('obra_contract_items_v1');
+      if (saved) {
+        try {
+          setContractItems(JSON.parse(saved));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    };
+    
+    loadItems();
+    
+    window.addEventListener('contractItemsUpdated', loadItems);
+    
+    return () => window.removeEventListener('contractItemsUpdated', loadItems);
+  }, []);
+
   // Generate list of actas based on configured totalActas (default 10) plus any custom assigned actas
   const availableActas = getAvailableActas(elements, globalConfig?.totalActas || 10);
 
@@ -92,7 +114,7 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
             <ClipboardList className="w-4 h-4 text-sky-600" />
             <span>Bitácora de Inspección</span>
           </h2>
-          <p className="text-[11px] text-slate-400">Listado de cámaras y tramos canalizados</p>
+          <p className="text-xs text-slate-400">Listado de cámaras y tramos canalizados</p>
         </div>
         <div className="flex items-center gap-1.5">
           {elements.length > 0 && onDeleteAllElements && (
@@ -189,27 +211,29 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
       </div>
 
       {/* Table Container */}
-      <div className="overflow-x-auto max-h-[500px]">
-        <table className="w-full text-left border-collapse text-xs">
+      <div className="overflow-x-auto responsive-table max-h-[500px]">
+        <table className="w-full text-left border-collapse text-sm">
           <thead>
-            <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[10px] uppercase font-bold tracking-wider">
-              <th className="py-2 px-3 min-w-[380px]">Elemento / Sector</th>
-              <th className="py-2 px-2 text-center w-28">Estado</th>
-              <th className="py-2 px-2 text-center w-24">Acta</th>
-              <th className="py-2 px-2 text-center w-28">Ítem Cobro</th>
-              <th className="py-2 px-2 text-left min-w-[130px]">Observaciones</th>
-              <th className="py-2 px-2 text-center w-28">Fecha</th>
+            <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs uppercase font-bold tracking-wider">
+              <th className="py-2 px-3 min-w-[320px]">Elemento / Sector</th>
+              <th className="py-2 px-2 text-center min-w-[140px]">Estado</th>
+              <th className="py-2 px-2 text-center min-w-[130px]">ID Unico crono</th>
+              <th className="py-2 px-2 text-center min-w-[130px]">Acta</th>
+              <th className="py-2 px-2 text-center min-w-[160px]">Ítem Cobro</th>
+              <th className="py-2 px-2 text-left min-w-[160px]">Observaciones</th>
+              <th className="py-2 px-2 text-center min-w-[120px]">Fecha</th>
+              <th className="py-2 px-2 text-center min-w-[100px]">T. Ejecución</th>
               <th className="py-2 px-1 text-center w-16 no-print">Acción</th>
             </tr>
           </thead>
           <tbody>
             {filteredElements.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
+                <td colSpan={8} className="py-8 text-center text-slate-400 text-xs">
                   <div className="flex flex-col items-center gap-1">
                     <ClipboardList className="w-8 h-8 text-slate-300" />
                     <span>No hay elementos registrados en la bitácora</span>
-                    <span className="text-[10px] text-slate-400">Dibuja tramos o coloca cámaras en el plano</span>
+                    <span className="text-xs text-slate-400">Dibuja tramos o coloca cámaras en el plano</span>
                   </div>
                 </td>
               </tr>
@@ -219,20 +243,20 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
 
                 return (
                   <tr key={el.id} className="hover:bg-slate-50 transition border-b border-slate-100">
-                    <td className="py-2 px-3">
+                    <td className="py-2 px-3" data-label="Elemento">
                       <div className="flex items-center justify-between gap-1">
                         <input
                           type="text"
                           value={el.label}
                           onChange={(e) => onUpdateElement({ ...el, label: e.target.value })}
-                          className="font-extrabold text-slate-800 text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-sky-500 focus:outline-none w-28"
+                          className="font-extrabold text-slate-800 text-sm bg-transparent border-b border-transparent hover:border-slate-300 focus:border-sky-500 focus:outline-none w-28"
                         />
                         <div className="flex items-center gap-1">
-                          <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
+                          <span className="text-xs font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
                             {areaBadge}
                           </span>
                           {el.scheduleItemId && (
-                            <span className="text-[10px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200" title="Código de Cronograma">
+                            <span className="text-xs font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200" title="Código de Cronograma">
                               [{el.scheduleItemId}]
                             </span>
                           )}
@@ -241,11 +265,11 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
 
                       {el.type === 'camera' ? (
                         <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                          <span className="text-[10px] text-slate-500 font-semibold">Norma:</span>
+                          <span className="text-xs text-slate-500 font-semibold">Norma:</span>
                           <select
                             value={el.camType || 'SB850'}
                             onChange={(e) => onUpdateElement({ ...el, camType: e.target.value as CameraNorm })}
-                            className="text-[11px] px-1.5 py-0.5 border border-slate-200 rounded font-mono bg-white"
+                            className="text-xs px-1.5 py-0.5 border border-slate-200 rounded font-mono bg-white"
                           >
                             <option value="SB858">SB858 (Comunicaciones)</option>
                             <option value="SB850">SB850 (BT)</option>
@@ -254,24 +278,24 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                           </select>
                         </div>
                       ) : (
-                        <div className="mt-1.5 space-y-1.5 bg-slate-50/80 p-1.5 rounded-lg border border-slate-200/80 text-[11px]">
+                        <div className="mt-1.5 space-y-1.5 bg-slate-50/80 p-1.5 rounded-lg border border-slate-200/80 text-xs">
                           {/* First row: Tubería & Cables */}
                           <div className="grid grid-cols-2 gap-2">
                             <div className="min-w-0">
-                              <span className="text-[10px] text-slate-500 font-semibold block mb-0.5">Tubería</span>
+                              <span className="text-xs text-slate-500 font-semibold block mb-0.5">Tubería</span>
                               <input
                                 type="text"
                                 placeholder="Ej: 3x4 pulg"
                                 value={el.pipes || ''}
                                 onChange={(e) => onUpdateElement({ ...el, pipes: e.target.value })}
-                                className="w-full px-2 py-1 border border-slate-200 rounded bg-white text-[11px] font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                                className="w-full px-2 py-1 border border-slate-200 rounded bg-white text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-500"
                               />
                             </div>
 
                             <div className="min-w-0">
                               <div className="flex items-center justify-between mb-0.5 gap-1">
-                                <span className="text-[10px] text-slate-500 font-semibold truncate">Cables</span>
-                                <label className="text-[9px] text-amber-800 bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-300 font-bold flex items-center gap-1 cursor-pointer shrink-0 hover:bg-amber-100">
+                                <span className="text-xs text-slate-500 font-semibold truncate">Cables</span>
+                                <label className="text-[10px] text-amber-800 bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-300 font-bold flex items-center gap-1 cursor-pointer shrink-0 hover:bg-amber-100">
                                   <input
                                     type="checkbox"
                                     checked={el.onlyPipes || false}
@@ -291,19 +315,19 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                                 disabled={el.onlyPipes}
                                 value={el.onlyPipes ? 'N/A (Solo Tubería)' : (el.cables || '')}
                                 onChange={(e) => onUpdateElement({ ...el, cables: e.target.value })}
-                                className="w-full px-2 py-1 border border-slate-200 rounded bg-white text-[11px] font-medium text-slate-800 disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                                className="w-full px-2 py-1 border border-slate-200 rounded bg-white text-xs font-medium text-slate-800 disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:ring-1 focus:ring-sky-500"
                               />
                             </div>
                           </div>
 
                           {/* Second row: Longitud Metros */}
                           <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
-                            <span className="text-[10px] text-slate-500 font-semibold shrink-0">Metros de Tramo (m):</span>
+                            <span className="text-xs text-slate-500 font-semibold shrink-0">Metros de Tramo (m):</span>
                             <div className="flex items-center gap-1">
                               <button
                                 type="button"
                                 onClick={() => onUpdateElement(adjustTramoMeters(el, -1, true))}
-                                className="p-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-md text-[10px] font-bold transition flex items-center justify-center shrink-0"
+                                className="p-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-md text-xs font-bold transition flex items-center justify-center shrink-0"
                                 title="Reducir 1m"
                               >
                                 <Minus className="w-3 h-3" />
@@ -321,19 +345,19 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                               <button
                                 type="button"
                                 onClick={() => onUpdateElement(adjustTramoMeters(el, 1, true))}
-                                className="p-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-md text-[10px] font-bold transition flex items-center justify-center shrink-0"
+                                className="p-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-md text-xs font-bold transition flex items-center justify-center shrink-0"
                                 title="Aumentar 1m"
                               >
                                 <Plus className="w-3 h-3" />
                               </button>
-                              <span className="text-[11px] font-bold text-slate-600 ml-0.5">m</span>
+                              <span className="text-xs font-bold text-slate-600 ml-0.5">m</span>
                             </div>
                           </div>
                         </div>
                       )}
                     </td>
 
-                    <td className="py-2 px-2 text-center">
+                    <td className="py-2 px-2 text-center" data-label="Estado">
                       <select
                         value={el.status}
                         onChange={(e) => {
@@ -348,7 +372,7 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                           }
                           onUpdateElement({ ...el, status: newStatus, progressPercent: newPercent });
                         }}
-                        className={`w-full px-2 py-1 text-xs font-bold rounded-lg cursor-pointer border ${getStatusBadgeClass(el.status)}`}
+                        className={`w-full px-2 py-1 text-sm font-bold rounded-lg cursor-pointer border ${getStatusBadgeClass(el.status)}`}
                       >
                         <option value="Pendiente">Pendiente</option>
                         <option value="En proceso">En proceso</option>
@@ -357,7 +381,7 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
 
                       {el.status === 'En proceso' && (
                         <div className="mt-1 flex items-center justify-center gap-1 bg-amber-50/90 border border-amber-300 rounded px-1.5 py-0.5 shadow-xs">
-                          <span className="text-[10px] font-extrabold text-amber-800 shrink-0">% Avance:</span>
+                          <span className="text-xs font-extrabold text-amber-800 shrink-0">% Avance:</span>
                           <input
                             type="number"
                             min={0}
@@ -370,16 +394,26 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                             className="w-12 px-1 py-0.5 text-center text-xs font-black text-amber-900 bg-white border border-amber-400 rounded focus:ring-1 focus:ring-amber-500"
                             title="Ingresar porcentaje de avance de ejecución (0-100%)"
                           />
-                          <span className="text-[10px] font-black text-amber-800">%</span>
+                          <span className="text-xs font-black text-amber-800">%</span>
                         </div>
                       )}
                     </td>
 
-                    <td className="py-2 px-1 text-center">
+                    <td className="py-2 px-1 text-center" data-label="ID Unico crono">
+                      <input
+                        type="text"
+                        placeholder="ID crono"
+                        value={el.scheduleItemId || ''}
+                        onChange={(e) => onUpdateElement({ ...el, scheduleItemId: e.target.value })}
+                        className="w-full px-1.5 py-1 border border-slate-200 hover:border-slate-300 focus:border-indigo-500 rounded text-sm text-slate-700 font-mono text-center transition bg-slate-50 focus:bg-white"
+                        title="ID Único del Cronograma"
+                      />
+                    </td>
+                    <td className="py-2 px-1 text-center" data-label="Acta">
                       <select
                         value={normalizeActa(el.acta) === 'Sin Asignar' ? '' : normalizeActa(el.acta)}
                         onChange={(e) => onUpdateElement({ ...el, acta: e.target.value })}
-                        className="w-full px-1.5 py-1 border border-emerald-300 rounded text-xs font-bold text-emerald-900 bg-emerald-50/70 hover:bg-emerald-100/90 focus:bg-white focus:ring-1 focus:ring-emerald-500 text-center transition cursor-pointer"
+                        className="w-full px-1.5 py-1 border border-emerald-300 rounded text-sm font-bold text-emerald-900 bg-emerald-50/70 hover:bg-emerald-100/90 focus:bg-white focus:ring-1 focus:ring-emerald-500 text-center transition cursor-pointer"
                         title="Seleccionar Acta de cobro asignada"
                       >
                         <option value="">-- Sin Acta --</option>
@@ -391,38 +425,62 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                       </select>
                     </td>
 
-                    <td className="py-2 px-1 text-center">
-                      <input
-                        type="text"
-                        placeholder="Sin Ítem"
+                    <td className="py-2 px-1 text-center" data-label="Ítem Cobro">
+                      <select
                         value={el.itemCobro || ''}
-                        onChange={(e) => onUpdateElement({ ...el, itemCobro: e.target.value })}
-                        className="w-full px-1.5 py-1 border border-sky-300 rounded text-xs font-bold text-sky-900 bg-sky-50/70 hover:bg-sky-100/90 focus:bg-white focus:ring-1 focus:ring-sky-500 text-center transition"
-                        title="Ítem del acta/presupuesto (Ej. 3.63, 3.59, 6.1 D)"
-                      />
+                        onChange={(e) => {
+                          const selectedItem = e.target.value;
+                          const contractItem = contractItems.find(c => c.item === selectedItem);
+                          if (contractItem) {
+                            onUpdateElement({ 
+                              ...el, 
+                              itemCobro: contractItem.item,
+                              itemDescripcion: contractItem.description,
+                              itemUnidad: contractItem.unit
+                            });
+                          } else {
+                            onUpdateElement({ ...el, itemCobro: selectedItem });
+                          }
+                        }}
+                        className="w-full px-1 py-1 border border-sky-300 rounded text-sm font-bold text-sky-900 bg-sky-50/70 hover:bg-sky-100/90 focus:bg-white focus:ring-1 focus:ring-sky-500 transition cursor-pointer"
+                        title="Ítem del acta/presupuesto"
+                      >
+                        <option value="">-- Sin Ítem --</option>
+                        {contractItems.map((ci, idx) => (
+                          <option key={`${ci.item}_${idx}`} value={ci.item}>
+                            {ci.item} - {ci.description.slice(0, 30)}
+                          </option>
+                        ))}
+                        {el.itemCobro && !contractItems.find(c => c.item === el.itemCobro) && (
+                          <option value={el.itemCobro}>{el.itemCobro}</option>
+                        )}
+                      </select>
                     </td>
 
-                    <td className="py-2 px-2 text-left">
+                    <td className="py-2 px-2 text-left" data-label="Observaciones">
                       <input
                         type="text"
                         placeholder="Sin observaciones..."
                         value={el.observations || ''}
                         onChange={(e) => onUpdateElement({ ...el, observations: e.target.value })}
-                        className="w-full px-2 py-1 border border-slate-200 hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded text-xs text-slate-700 bg-slate-50/60 transition placeholder:text-slate-300 placeholder:italic"
+                        className="w-full px-2 py-1 border border-slate-200 hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded text-sm text-slate-700 bg-slate-50/60 transition placeholder:text-slate-300 placeholder:italic"
                         title="Notas u observaciones de campo"
                       />
                     </td>
 
-                    <td className="py-2 px-2 text-center">
+                    <td className="py-2 px-2 text-center" data-label="Fecha">
                       <input
                         type="date"
                         value={el.date}
                         onChange={(e) => onUpdateElement({ ...el, date: e.target.value })}
-                        className="px-1 py-1 border border-slate-200 rounded text-[11px] text-slate-700"
+                        className="px-1 py-1 border border-slate-200 rounded text-sm text-slate-700"
                       />
                     </td>
 
-                    <td className="py-2 px-1 text-center no-print">
+                    <td className="py-2 px-2 text-center font-mono text-[11px] text-slate-600" data-label="T. Ejec.">
+                      {el.startDate ? formatExecutionTime(el.startDate, el.endDate) : "-"}
+                    </td>
+                    <td className="py-2 px-1 text-center no-print" data-label="Acción">
                       <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={() => onInspectElement(el)}
@@ -431,7 +489,7 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                         >
                           <Camera className="w-3.5 h-3.5" />
                           {el.photos && el.photos.length > 0 && (
-                            <span className="text-[9px] font-bold bg-sky-100 text-sky-800 px-1 rounded-full">
+                            <span className="text-[10px] font-bold bg-sky-100 text-sky-800 px-1 rounded-full">
                               {el.photos.length}
                             </span>
                           )}

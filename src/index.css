@@ -1,1 +1,75 @@
 @import "tailwindcss";
+
+/* Mobile Responsive Table */
+@media (max-width: 767px) {
+  .responsive-table table, 
+  .responsive-table thead, 
+  .responsive-table tbody, 
+  .responsive-table th, 
+  .responsive-table td, 
+  .responsive-table tr { 
+    display: block; 
+  }
+  
+  .responsive-table thead tr { 
+    display: none; 
+  }
+  
+  .responsive-table tr {
+    background-color: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    margin-bottom: 0.75rem;
+    padding: 0.75rem;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  }
+  
+  .responsive-table td {
+    border: none !important;
+    position: relative;
+    padding: 0.5rem 0 0.5rem 40% !important;
+    text-align: right !important;
+    min-height: 2.5rem;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+  
+  .responsive-table td:before {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.25rem;
+    width: 35%;
+    padding-right: 10px;
+    white-space: nowrap;
+    text-align: left;
+    font-weight: 600;
+    color: #64748b;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    content: attr(data-label);
+    display: flex;
+    align-items: center;
+  }
+
+  .responsive-table td > div {
+    justify-content: flex-end;
+    width: 100%;
+  }
+  
+  .responsive-table td > input, 
+  .responsive-table td > select,
+  .responsive-table td > textarea {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+html, body {
+  min-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}

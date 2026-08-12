@@ -426,6 +426,35 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
                   </label>
                 </div>
 
+                {/* Lock Blueprint Layout Setting */}
+                <div className="border-t border-slate-800 pt-3.5 flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-xs font-bold text-rose-400 flex items-center gap-1.5">
+                      <Shield className="w-4 h-4 text-rose-400" />
+                      Fijar Plano de Obra (Bloqueo de Layout)
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Bloquea el diseño estructural del plano. Impide crear, mover o borrar trazos, cámaras y áreas.
+                      Permite interactuar, actualizar estados y revisar propiedades.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!globalConfig.lockBlueprintLayout}
+                      onChange={e => {
+                        onUpdateGlobalConfig({
+                          ...globalConfig,
+                          lockBlueprintLayout: e.target.checked
+                        });
+                        showToast(`Plano de Obra ${e.target.checked ? 'FIJADO (Bloqueado)' : 'DESBLOQUEADO'}`);
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
+                  </label>
+                </div>
+
                 {/* Actas de Obra total quantity setting */}
                 <div className="border-t border-slate-800 pt-3.5 space-y-2">
                   <div className="flex items-start justify-between gap-3">

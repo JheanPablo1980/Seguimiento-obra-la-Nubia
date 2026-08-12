@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { AuthUser, DailyTrackingLog, UserProfile, VersionHistoryLog } from '../types';
+import { AuthUser, DailyTrackingLog, UserProfile, VersionHistoryLog, InspectionElement, ScheduleItem, AreaSector, ProjectMeta } from '../types';
 
 
 const sanitizeEnv = (val: any): string => {
@@ -42,7 +42,7 @@ export const supabaseAuth = {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           const userEmail = (session.user.email || '').trim().toLowerCase();
-          const isAdmin = userEmail === 'jheanmurillo73@gmail.com' || userEmail.includes('admin') || session.user.user_metadata?.role === 'admin';
+          const isAdmin = userEmail === 'jheanmurillo73@gmail.com'  || session.user.user_metadata?.role === 'admin';
           return {
             id: session.user.id,
             email: session.user.email || '',
@@ -63,7 +63,7 @@ export const supabaseAuth = {
         const parsed = JSON.parse(savedLocal);
         if (parsed && parsed.email) {
           const userEmail = parsed.email.trim().toLowerCase();
-          const isAdmin = userEmail === 'jheanmurillo73@gmail.com' || userEmail.includes('admin') || parsed.role === 'admin';
+          const isAdmin = userEmail === 'jheanmurillo73@gmail.com'  || parsed.role === 'admin';
           parsed.role = isAdmin ? 'admin' : (parsed.role || 'inspector');
         }
         return parsed;
@@ -77,7 +77,7 @@ export const supabaseAuth = {
   async signInWithEmail(email: string, password: string): Promise<{ user: AuthUser | null; error: string | null }> {
     const cleanEmail = email.trim();
     const lowerEmail = cleanEmail.toLowerCase();
-    const isTargetAdmin = lowerEmail === 'jheanmurillo73@gmail.com' || lowerEmail.includes('admin');
+    const isTargetAdmin = lowerEmail === 'jheanmurillo73@gmail.com' ;
 
     if (supabase) {
       try {
@@ -139,7 +139,7 @@ export const supabaseAuth = {
   async signUpWithEmail(email: string, password: string, fullName: string): Promise<{ user: AuthUser | null; error: string | null }> {
     const cleanEmail = email.trim();
     const lowerEmail = cleanEmail.toLowerCase();
-    const isTargetAdmin = lowerEmail === 'jheanmurillo73@gmail.com' || lowerEmail.includes('admin');
+    const isTargetAdmin = lowerEmail === 'jheanmurillo73@gmail.com' ;
 
     if (supabase) {
       try {
@@ -600,7 +600,6 @@ export const supabaseElements = {
           pipes: item.pipes,
           cables: item.cables,
           meters: item.meters,
-          norm: item.norm,
           acta: item.acta,
           itemCobro: item.item_cobro || item.itemCobro,
           itemDescripcion: item.item_descripcion || item.itemDescripcion,
@@ -632,7 +631,6 @@ export const supabaseElements = {
         pipes: e.pipes,
         cables: e.cables,
         meters: e.meters,
-        norm: e.norm,
         acta: e.acta,
         item_cobro: e.itemCobro,
         item_descripcion: e.itemDescripcion,
@@ -752,10 +750,15 @@ export const supabaseAreas = {
       if (data && data.length > 0) {
         return data.map((item: any) => ({
           id: item.id,
+          code: item.code || '',
           name: item.name,
-          color: item.color,
+          color: typeof item.color === 'string' ? JSON.parse(item.color) : (item.color || { fill: '#fff', stroke: '#000', badge: 'text-black' }),
           points: typeof item.points === 'string' ? JSON.parse(item.points) : (item.points || []),
-          metersTarget: item.meters_target ?? item.metersTarget ?? 0
+          widthMeters: item.width_meters,
+          lengthMeters: item.length_meters,
+          calculatedAreaM2: item.calculated_area,
+          notes: item.notes,
+          scheduleItemId: item.schedule_item_id
         }));
       }
     } catch (err) {
@@ -770,10 +773,15 @@ export const supabaseAreas = {
     try {
       const payload = areas.map(a => ({
         id: a.id,
+        code: a.code,
         name: a.name,
-        color: a.color,
+        color: JSON.stringify(a.color),
         points: JSON.stringify(a.points || []),
-        meters_target: a.metersTarget
+        width_meters: a.widthMeters,
+        length_meters: a.lengthMeters,
+        calculated_area: a.calculatedAreaM2,
+        notes: a.notes,
+        schedule_item_id: a.scheduleItemId
       }));
 
       const { error } = await supabase
@@ -810,13 +818,11 @@ export const supabaseProjectMeta = {
       if (data && data.length > 0) {
         const item = data[0];
         return {
-          projectName: item.project_name || item.projectName,
-          contractor: item.contractor,
-          supervisor: item.supervisor,
-          inspector: item.inspector,
-          location: item.location,
-          date: item.date,
-          blueprintUrl: item.blueprint_url || item.blueprintUrl
+          inspectorName: item.inspector_name || item.inspectorName || '',
+          contractorName: item.contractor_name || item.contractorName || '',
+          inspectionDate: item.inspection_date || item.inspectionDate || '',
+          sectorLocation: item.sector_location || item.sectorLocation || '',
+          actaDocuments: item.acta_documents || item.actaDocuments || {}
         };
       }
     } catch (err) {
@@ -831,13 +837,11 @@ export const supabaseProjectMeta = {
     try {
       const payload = {
         id: 'main_project',
-        project_name: meta.projectName,
-        contractor: meta.contractor,
-        supervisor: meta.supervisor,
-        inspector: meta.inspector,
-        location: meta.location,
-        date: meta.date,
-        blueprint_url: meta.blueprintUrl
+        inspector_name: meta.inspectorName,
+        contractor_name: meta.contractorName,
+        inspection_date: meta.inspectionDate,
+        sector_location: meta.sectorLocation,
+        acta_documents: meta.actaDocuments
       };
 
       const { error } = await supabase
@@ -1014,6 +1018,59 @@ export const supabaseAudit = {
         console.warn('Supabase version history insert warning:', err);
       }
     }
+  },
+
+  async fetchHistoryForElement(entityId: string, limit: number = 100): Promise<VersionHistoryLog[]> {
+    let cloudLogs: VersionHistoryLog[] = [];
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('version_history_logs')
+          .select('*')
+          .eq('entity_id', entityId)
+          .order('timestamp', { ascending: false })
+          .limit(limit);
+
+        if (!error && data && data.length > 0) {
+          cloudLogs = data.map((item: any) => ({
+            id: item.id,
+            timestamp: item.timestamp || item.created_at || new Date().toISOString(),
+            userEmail: item.user_email || item.userEmail || 'desconocido@obra.com',
+            userName: item.user_name || item.userName || 'Usuario',
+            userRole: item.user_role || item.userRole || 'inspector',
+            actionType: item.action_type || item.actionType || 'update',
+            entityType: item.entity_type || item.entityType || 'tramo',
+            entityId: item.entity_id || item.entityId,
+            entityName: item.entity_name || item.entityName,
+            details: item.details || '',
+            previousValue: item.previous_value || item.previousValue,
+            newValue: item.new_value || item.newValue
+          }));
+        }
+      } catch (err) {
+        console.warn('Could not fetch element history from Supabase, fallback to local storage:', err);
+      }
+    }
+
+    const rawLocal = localStorage.getItem(LOCAL_STORAGE_AUDIT_KEY);
+    let localLogs: VersionHistoryLog[] = [];
+    if (rawLocal) {
+      try { localLogs = JSON.parse(rawLocal); } catch (e) { localLogs = []; }
+    }
+    
+    localLogs = localLogs.filter(log => log.entityId === entityId);
+
+    const map = new Map<string, VersionHistoryLog>();
+    for (const log of [...localLogs, ...cloudLogs]) {
+      map.set(log.id, log);
+    }
+
+    const sorted = Array.from(map.values()).sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    return sorted.slice(0, limit);
   },
 
   async fetchHistory(limit: number = 100): Promise<VersionHistoryLog[]> {

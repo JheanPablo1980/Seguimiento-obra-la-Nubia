@@ -44,6 +44,7 @@ interface CanvasToolbarProps {
   onZoomOut: () => void;
   onZoomReset: () => void;
   onZoomFit?: () => void;
+  isLocked?: boolean;
   // Visibility
   showCameraLabels: boolean;
   onToggleCameraLabels: () => void;
@@ -77,6 +78,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onZoomOut,
   onZoomReset,
   onZoomFit,
+  isLocked = false,
   showCameraLabels,
   onToggleCameraLabels,
   showLineLabels,
@@ -113,11 +115,12 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               {/* Highlight Tool */}
               <button
                 onClick={() => onSelectTool('highlight')}
+                disabled={isLocked}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition ${
                   currentTool === 'highlight'
                     ? 'bg-sky-100 text-sky-900 border-sky-300'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
-                }`}
+                } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                 title="Resaltador / Trazo libre"
               >
                 <Highlighter className="w-3.5 h-3.5 text-amber-500" />
@@ -127,11 +130,12 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               {/* Straight Line Tool */}
               <button
                 onClick={() => onSelectTool('straight')}
+                disabled={isLocked}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition ${
                   currentTool === 'straight'
                     ? 'bg-sky-100 text-sky-900 border-sky-300'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
-                }`}
+                } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                 title="Trazo Recto de Canalización"
               >
                 <Ruler className="w-3.5 h-3.5 text-sky-600" />
@@ -141,11 +145,12 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               {/* Camera Tool */}
               <button
                 onClick={() => onSelectTool('camera')}
+                disabled={isLocked}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition ${
                   currentTool === 'camera'
                     ? 'bg-rose-100 text-rose-900 border-rose-300'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
-                }`}
+                } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                 title="Colocar Cámara o Caja"
               >
                 <MapPin className="w-3.5 h-3.5 text-rose-500" />
@@ -155,11 +160,12 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               {/* Area Demarcation Tool */}
               <button
                 onClick={() => onSelectTool('area')}
+                disabled={isLocked}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition ${
                   currentTool === 'area'
                     ? 'bg-purple-100 text-purple-900 border-purple-300'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
-                }`}
+                } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                 title="Demarcar polígono de sector"
               >
                 <VectorSquare className="w-3.5 h-3.5 text-purple-600" />
@@ -169,11 +175,12 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               {/* Eraser Tool */}
               <button
                 onClick={() => onSelectTool('eraser')}
+                disabled={isLocked}
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition ${
                   currentTool === 'eraser'
                     ? 'bg-slate-800 text-white border-slate-900'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
-                }`}
+                } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                 title="Borrador"
               >
                 <Eraser className="w-3.5 h-3.5 text-slate-500" />
