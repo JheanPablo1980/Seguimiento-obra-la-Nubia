@@ -172,61 +172,81 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
 
       if (matchedItemId && map[matchedItemId]) {
         const value = el.type === 'line' ? (el.meters || 0) : 1;
+        let elProgress = el.progressPercent;
+        if (elProgress === undefined || elProgress === null) {
+          if (el.status === 'Terminado') elProgress = 100;
+          else if (el.status === 'En proceso') elProgress = 50;
+          else elProgress = 0;
+        }
+        elProgress = Math.min(100, Math.max(0, Number(elProgress) || 0));
+
+        const executedPart = value * (elProgress / 100);
         map[matchedItemId].count += 1;
         map[matchedItemId].elements.push(el);
+        map[matchedItemId].executed += executedPart;
 
-        if (el.status === 'Terminado') {
-          map[matchedItemId].executed += value;
-        } else if (el.status === 'En proceso') {
-          map[matchedItemId].inProgress += value;
+        if (el.status === 'Terminado' || elProgress >= 100) {
+          // Complete
+        } else if (elProgress > 0) {
+          map[matchedItemId].inProgress += value * ((100 - elProgress) / 100);
         } else {
           map[matchedItemId].pending += value;
         }
       }
     });
 
-    // Populate completionPercent
+    // Populate completionPercent based on (executed quantity / estimated target quantity)
     Object.keys(map).forEach(key => {
-      map[key].completionPercent = avances[key] || 0;
+      const item = scheduleItems.find(i => i.id === key);
+      if (item && item.targetQuantity > 0) {
+        map[key].completionPercent = Math.min(100, Math.round((map[key].executed / item.targetQuantity) * 1000) / 10);
+      } else {
+        map[key].completionPercent = Math.round((avances[key] || 0) * 10) / 10;
+      }
     });
     return map;
   }, [scheduleItems, elements]);
 
-  // Overall totals calculation
+  // Overall totals calculation using weighted average formula: SUMAPRODUCTO(Cantidad, % Avance) / SUMA(Cantidad Total)
   const totals = useMemo(() => {
     let totalTarget = 0;
     let totalExecuted = 0;
-    let totalEntrega1 = 0;
-    let totalEntrega2 = 0;
+    let sumProduct = 0; // Sum of (Cantidad_i * %_avance_i)
 
     scheduleItems.forEach(item => {
-      totalTarget += item.targetQuantity;
-      totalEntrega1 += item.entrega1Target;
-      totalEntrega2 += item.entrega2Target;
+      const cantidad = item.targetQuantity || 0;
+      totalTarget += cantidad;
       const prog = progressMap[item.id];
+      const pctAvance = prog ? (prog.completionPercent || 0) : 0;
+
       if (prog) {
         totalExecuted += prog.executed;
       }
+
+      sumProduct += (cantidad * pctAvance);
     });
 
-    let sumPcts = 0;
-    let countPcts = 0;
-    scheduleItems.forEach(item => {
-      if (progressMap[item.id] && progressMap[item.id].completionPercent !== undefined) {
-        sumPcts += progressMap[item.id].completionPercent;
-        countPcts++;
-      }
-    });
-    const globalPct = countPcts > 0 ? (sumPcts / countPcts) : 0;
-    const entrega1Pct = totalEntrega1 > 0 ? Math.min(100, (totalExecuted / totalEntrega1) * 100) : 0;
+    // Formula: Avance Total = SUMAPRODUCTO(A2:A5, B2:B5) / SUMA(A2:A5)
+    let globalPct = 0;
+    if (totalTarget > 0) {
+      globalPct = Math.round((sumProduct / totalTarget) * 10) / 10;
+    } else {
+      let sumPcts = 0;
+      let countPcts = 0;
+      scheduleItems.forEach(item => {
+        if (progressMap[item.id] && progressMap[item.id].completionPercent !== undefined) {
+          sumPcts += progressMap[item.id].completionPercent;
+          countPcts++;
+        }
+      });
+      globalPct = countPcts > 0 ? Math.round((sumPcts / countPcts) * 10) / 10 : 0;
+    }
 
     return {
       totalTarget,
       totalExecuted,
-      totalEntrega1,
-      totalEntrega2,
-      globalPct: Math.round(globalPct * 10) / 10,
-      entrega1Pct: Math.round(entrega1Pct * 10) / 10
+      sumProduct,
+      globalPct
     };
   }, [scheduleItems, progressMap]);
 
@@ -580,8 +600,8 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
             <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Pendiente Total / Meta</span>
             <span className="text-lg font-black text-amber-400 font-mono mt-0.5">{totals.totalTarget.toLocaleString()} <span className="text-[10px] text-slate-400 font-sans">unidades/mts</span></span>
           </div>
-          <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 flex flex-col justify-between">
-            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Avance Ejecutado Real</span>
+          <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 flex flex-col justify-between" title="Avance Total = SUMAPRODUCTO(Cantidad, % Avance) / SUMA(Cantidad Total)">
+            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Avance Ponderado Real</span>
             <span className="text-lg font-black text-emerald-400 font-mono mt-0.5">{totals.totalExecuted.toLocaleString()} <span className="text-[10px] text-emerald-500/80 font-sans">({totals.globalPct}%)</span></span>
           </div>
           <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 flex flex-col justify-between">
