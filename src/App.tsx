@@ -338,6 +338,28 @@ export default function App() {
     });
     showToast(collapse ? 'Todos los módulos han sido contraídos' : 'Todos los módulos han sido expandidos');
   };
+
+  const handleSelectMobileTab = (tab: 'dashboard' | 'planos' | 'bitacora' | 'both' | 'sectores') => {
+    if (tab === 'planos') {
+      setActiveTab('planos');
+      setFieldMobileTab('canvas');
+      setCollapsedModules(prev => ({ ...prev, canvas: false }));
+    } else if (tab === 'bitacora') {
+      setActiveTab('bitacora');
+      setFieldMobileTab('bitacora');
+      setCollapsedModules(prev => ({ ...prev, bitacora: false }));
+    } else if (tab === 'both') {
+      setActiveTab('dashboard');
+      setFieldMobileTab('both');
+      setCollapsedModules(prev => ({ ...prev, canvas: false, bitacora: false }));
+    } else if (tab === 'sectores') {
+      setActiveTab('sectores');
+    } else {
+      setActiveTab('dashboard');
+      setFieldMobileTab('both');
+    }
+  };
+
   const canvasRef = useRef<BlueprintCanvasRef>(null);
 
   // Canvas Toolbar State
@@ -1184,57 +1206,57 @@ export default function App() {
         </CollapsibleModule>
       )}
 
-      {/* Inspector Mode Mobile Sub-Bar */}
-      {appMode === 'field' && (
+      {/* Inspector Mode / Mobile View Control Sub-Bar */}
+      {(appMode === 'field' || isMobile) && (
         <div className="bg-slate-900 text-white border border-slate-800 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 no-print shadow-md">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-amber-500 rounded-lg text-slate-950 font-black">
+            <div className="p-1.5 bg-amber-500 rounded-lg text-slate-950 font-black shrink-0">
               <HardHat className="w-5 h-5" />
             </div>
             <div>
               <span className="text-xs font-bold text-amber-300 block">
-                Panel de Campo / Inspector Móvil
+                {appMode === 'field' ? 'Panel de Campo / Inspector Móvil' : 'Vista Rápida Móvil'}
               </span>
               <span className="text-[11px] text-slate-400">
-                Acceso exclusivo a Plano Interactivo y Bitácora de Registro
+                Acceso directo a Plano Interactivo y Bitácora de Registro
               </span>
             </div>
           </div>
 
           <div className="flex items-center bg-slate-950 p-1 rounded-xl gap-1 border border-slate-800 text-xs w-full sm:w-auto justify-stretch sm:justify-end">
             <button
-              onClick={() => setFieldMobileTab('canvas')}
-              className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg font-bold transition flex items-center justify-center gap-1.5 ${
-                fieldMobileTab === 'canvas'
+              onClick={() => handleSelectMobileTab('planos')}
+              className={`flex-1 sm:flex-none px-3 py-2 rounded-lg font-bold transition flex items-center justify-center gap-1.5 ${
+                activeTab === 'planos' || (fieldMobileTab === 'canvas' && activeTab !== 'dashboard')
                   ? 'bg-amber-500 text-slate-950 shadow-sm'
                   : 'text-slate-300 hover:text-white bg-slate-900/50'
               }`}
             >
-              <MapIcon className="w-4 h-4 text-amber-900" />
+              <MapIcon className="w-4 h-4 text-amber-900 shrink-0" />
               <span>📐 Plano Interactivo</span>
             </button>
 
             <button
-              onClick={() => setFieldMobileTab('bitacora')}
-              className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg font-bold transition flex items-center justify-center gap-1.5 ${
-                fieldMobileTab === 'bitacora'
+              onClick={() => handleSelectMobileTab('bitacora')}
+              className={`flex-1 sm:flex-none px-3 py-2 rounded-lg font-bold transition flex items-center justify-center gap-1.5 ${
+                activeTab === 'bitacora' || (fieldMobileTab === 'bitacora' && activeTab !== 'dashboard')
                   ? 'bg-teal-500 text-slate-950 shadow-sm'
                   : 'text-slate-300 hover:text-white bg-slate-900/50'
               }`}
             >
-              <ClipboardList className="w-4 h-4 text-teal-900" />
+              <ClipboardList className="w-4 h-4 text-teal-900 shrink-0" />
               <span>📝 Bitácora ({elements.length})</span>
             </button>
 
             <button
-              onClick={() => setFieldMobileTab('both')}
+              onClick={() => handleSelectMobileTab('both')}
               className={`flex-1 sm:flex-none px-3 py-2 rounded-lg font-bold transition flex items-center justify-center gap-1.5 ${
-                fieldMobileTab === 'both'
+                activeTab === 'dashboard' && fieldMobileTab === 'both'
                   ? 'bg-slate-800 text-amber-300 border border-amber-500/40 shadow-sm'
                   : 'text-slate-400 hover:text-white bg-slate-900/50'
               }`}
             >
-              <LayoutGrid className="w-4 h-4 text-sky-400" />
+              <LayoutGrid className="w-4 h-4 text-sky-400 shrink-0" />
               <span>📱 Ambos</span>
             </button>
           </div>
@@ -1244,9 +1266,9 @@ export default function App() {
       {/* Main Grid: Left Canvas + Toolbar, Right Bitácora Table */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-start">
         {/* Left Column: Canvas & Toolbar */}
-        {(appMode === 'admin' || fieldMobileTab === 'both' || fieldMobileTab === 'canvas') && (
+        {(isPlanosTab && (appMode === 'admin' || fieldMobileTab === 'both' || fieldMobileTab === 'canvas')) && (
           <div className={`${
-            (appMode === 'field' && fieldMobileTab === 'canvas') || (collapsedModules.bitacora && !collapsedModules.canvas)
+            (appMode === 'field' && fieldMobileTab === 'canvas') || (collapsedModules.bitacora && !collapsedModules.canvas) || activeTab === 'planos' || fieldMobileTab === 'canvas'
               ? 'lg:col-span-12'
               : 'lg:col-span-7'
           } flex flex-col gap-2 w-full`}>
@@ -1347,9 +1369,9 @@ export default function App() {
         )}
 
         {/* Right Column: Bitácora Table */}
-        {(appMode === 'admin' || fieldMobileTab === 'both' || fieldMobileTab === 'bitacora') && (
+        {(isBitacoraTab && (appMode === 'admin' || fieldMobileTab === 'both' || fieldMobileTab === 'bitacora')) && (
           <div className={`${
-            (appMode === 'field' && fieldMobileTab === 'bitacora') || (collapsedModules.canvas && !collapsedModules.bitacora)
+            (appMode === 'field' && fieldMobileTab === 'bitacora') || (collapsedModules.canvas && !collapsedModules.bitacora) || activeTab === 'bitacora' || fieldMobileTab === 'bitacora'
               ? 'lg:col-span-12'
               : 'lg:col-span-5'
           } flex flex-col gap-2 w-full`}>
@@ -1567,38 +1589,29 @@ export default function App() {
 
       {/* Mobile Bottom Navigation */}
       {isMobile && (
-        <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex items-center justify-around p-1.5 z-[100] pb-[calc(env(safe-area-inset-bottom)+4px)] shadow-lg no-print">
+        <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex items-center justify-around p-1 z-[100] pb-[calc(env(safe-area-inset-bottom)+4px)] shadow-2xl no-print">
           {appMode === 'field' ? (
             <>
               <button
-                onClick={() => {
-                  setFieldMobileTab('canvas');
-                  setActiveTab('planos');
-                }}
+                onClick={() => handleSelectMobileTab('planos')}
                 className={`flex flex-col items-center py-1 px-3 rounded-lg transition ${
-                  fieldMobileTab === 'canvas' ? 'text-amber-400 bg-amber-500/10 font-bold' : 'text-slate-400 hover:text-white'
+                  activeTab === 'planos' || fieldMobileTab === 'canvas' ? 'text-amber-400 bg-amber-500/10 font-bold' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 <MapIcon className="w-5 h-5 mb-0.5" />
                 <span className="text-[10px]">📐 Plano</span>
               </button>
               <button
-                onClick={() => {
-                  setFieldMobileTab('bitacora');
-                  setActiveTab('bitacora');
-                }}
+                onClick={() => handleSelectMobileTab('bitacora')}
                 className={`flex flex-col items-center py-1 px-3 rounded-lg transition ${
-                  fieldMobileTab === 'bitacora' ? 'text-teal-400 bg-teal-500/10 font-bold' : 'text-slate-400 hover:text-white'
+                  activeTab === 'bitacora' || fieldMobileTab === 'bitacora' ? 'text-teal-400 bg-teal-500/10 font-bold' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 <ClipboardList className="w-5 h-5 mb-0.5" />
                 <span className="text-[10px]">📝 Bitácora</span>
               </button>
               <button
-                onClick={() => {
-                  setFieldMobileTab('both');
-                  setActiveTab('dashboard');
-                }}
+                onClick={() => handleSelectMobileTab('both')}
                 className={`flex flex-col items-center py-1 px-3 rounded-lg transition ${
                   fieldMobileTab === 'both' ? 'text-sky-400 bg-sky-500/10 font-bold' : 'text-slate-400 hover:text-white'
                 }`}
@@ -1609,21 +1622,50 @@ export default function App() {
             </>
           ) : (
             <>
-              <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center p-2 ${activeTab === 'dashboard' ? 'text-blue-400 font-bold' : 'text-slate-400'}`}>
-                <LayoutGrid className="w-5 h-5 mb-1" />
+              <button
+                onClick={() => handleSelectMobileTab('dashboard')}
+                className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
+                  activeTab === 'dashboard' && fieldMobileTab === 'both' ? 'text-blue-400 bg-blue-500/10 font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <LayoutGrid className="w-5 h-5 mb-0.5" />
                 <span className="text-[10px]">Panel</span>
               </button>
-              <button onClick={() => setActiveTab('sectores')} className={`flex flex-col items-center p-2 ${activeTab === 'sectores' ? 'text-blue-400 font-bold' : 'text-slate-400'}`}>
-                <Building2 className="w-5 h-5 mb-1" />
-                <span className="text-[10px]">Sectores</span>
-              </button>
-              <button onClick={() => setActiveTab('planos')} className={`flex flex-col items-center p-2 ${activeTab === 'planos' ? 'text-blue-400 font-bold' : 'text-slate-400'}`}>
-                <MapIcon className="w-5 h-5 mb-1" />
+              <button
+                onClick={() => handleSelectMobileTab('planos')}
+                className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
+                  activeTab === 'planos' || (fieldMobileTab === 'canvas' && activeTab !== 'dashboard') ? 'text-amber-400 bg-amber-500/10 font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <MapIcon className="w-5 h-5 mb-0.5" />
                 <span className="text-[10px]">Planos</span>
               </button>
-              <button onClick={() => setActiveTab('bitacora')} className={`flex flex-col items-center p-2 ${activeTab === 'bitacora' ? 'text-blue-400 font-bold' : 'text-slate-400'}`}>
-                <ClipboardList className="w-5 h-5 mb-1" />
+              <button
+                onClick={() => handleSelectMobileTab('bitacora')}
+                className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
+                  activeTab === 'bitacora' || (fieldMobileTab === 'bitacora' && activeTab !== 'dashboard') ? 'text-teal-400 bg-teal-500/10 font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <ClipboardList className="w-5 h-5 mb-0.5" />
                 <span className="text-[10px]">Bitácora</span>
+              </button>
+              <button
+                onClick={() => handleSelectMobileTab('both')}
+                className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
+                  activeTab === 'dashboard' && fieldMobileTab === 'both' ? 'text-purple-400 bg-purple-500/10 font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <LayoutGrid className="w-5 h-5 mb-0.5" />
+                <span className="text-[10px]">Ambos</span>
+              </button>
+              <button
+                onClick={() => handleSelectMobileTab('sectores')}
+                className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
+                  activeTab === 'sectores' ? 'text-sky-400 bg-sky-500/10 font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Building2 className="w-5 h-5 mb-0.5" />
+                <span className="text-[10px]">Sectores</span>
               </button>
             </>
           )}

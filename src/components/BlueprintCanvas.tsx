@@ -1329,7 +1329,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-[550px] sm:h-[650px] bg-slate-900 rounded-xl overflow-hidden shadow-inner border border-slate-300 flex items-center justify-center select-none"
+      className="relative w-full h-[400px] sm:h-[620px] min-h-[350px] bg-slate-900 rounded-xl overflow-hidden shadow-inner border border-slate-700 flex items-center justify-center select-none"
     >
       {/* Floating Tramo Adjuster Tool bar over Canvas */}
       {activeLine && onUpdateElement && currentTool === 'pan' && (
@@ -1387,6 +1387,38 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           </button>
         </div>
       )}
+
+      {/* Floating Mobile Canvas Zoom Controls */}
+      <div className="absolute bottom-3 right-3 flex flex-col gap-1.5 z-30 no-print">
+        <button
+          type="button"
+          onClick={() => onZoomChange && onZoomChange(Math.min(4.0, zoomLevel * 1.25))}
+          className="w-10 h-10 bg-slate-950/90 text-white hover:bg-slate-800 border border-slate-700 rounded-xl shadow-lg flex items-center justify-center transition active:scale-95"
+          title="Acercar mapa"
+        >
+          <Plus className="w-5 h-5 text-amber-400" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onZoomChange && onZoomChange(Math.max(0.3, zoomLevel * 0.8))}
+          className="w-10 h-10 bg-slate-950/90 text-white hover:bg-slate-800 border border-slate-700 rounded-xl shadow-lg flex items-center justify-center transition active:scale-95"
+          title="Alejar mapa"
+        >
+          <Minus className="w-5 h-5 text-amber-400" />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setPanX(0);
+            setPanY(0);
+            if (onZoomChange) onZoomChange(1.0);
+          }}
+          className="w-10 h-10 bg-slate-950/90 text-white hover:bg-slate-800 border border-slate-700 rounded-xl shadow-lg flex items-center justify-center text-xs font-bold text-sky-400 transition active:scale-95"
+          title="Centrar mapa"
+        >
+          100%
+        </button>
+      </div>
 
       <canvas
         ref={canvasRef}

@@ -2,51 +2,81 @@ import { AreaSector, InspectionElement, ProjectMeta, AreaColor, ScheduleItem } f
 
 export const INITIAL_SCHEDULE_ITEMS: ScheduleItem[] = [
   {
-    id: '200502',
-    code: '200502',
-    description: 'Tubo PVC Ø4", 6mts, Conduit',
-    targetQuantity: 367,
+    id: 'DUCT-4-MT',
+    code: 'D-4-MT',
+    description: 'Ducto PVC Ø4" MT (Media Tensión)',
+    targetQuantity: 1548,
     unit: 'mts',
-    entrega1Target: 250,
-    entrega1Label: 'Entrega 1 - Últ. semana Jul 2026',
-    entrega2Target: 117,
-    entrega2Label: 'Entrega 2 - Agosto 2026',
-    finalDeadline: '01/08/2026',
+    entrega1Target: 936,
+    entrega1Label: 'Entrega 1 - Intersecciones (936m)',
+    entrega2Target: 612,
+    entrega2Label: 'Entrega 2 - Troncal (612m)',
+    finalDeadline: '15/09/2026',
     category: 'tuberia'
   },
   {
-    id: '200503',
-    code: '200503',
-    description: 'Tubo PVC Ø6", 6mts, Conduit',
-    targetQuantity: 495,
+    id: 'DUCT-4-DATOS',
+    code: 'D-4-DATOS',
+    description: 'Ducto PVC Ø4" Datos / Telecom',
+    targetQuantity: 1833,
     unit: 'mts',
-    entrega1Target: 350,
-    entrega1Label: 'Entrega 1 - Últ. semana Jul 2026',
-    entrega2Target: 145,
-    entrega2Label: 'Entrega 2 - Agosto 2026',
-    finalDeadline: '01/08/2026',
+    entrega1Target: 1628,
+    entrega1Label: 'Entrega 1 - Intersecciones (1628m)',
+    entrega2Target: 205,
+    entrega2Label: 'Entrega 2 - Troncal (205m)',
+    finalDeadline: '15/09/2026',
     category: 'tuberia'
   },
   {
-    id: 'CAM-850',
-    code: 'CAM-850',
-    description: 'Cámaras SB850 (Baja Tensión - 1.3m x 1.3m)',
-    targetQuantity: 15,
+    id: 'DUCT-6-BT',
+    code: 'D-6-BT',
+    description: 'Ducto PVC Ø6" BT (Baja Tensión)',
+    targetQuantity: 8233,
+    unit: 'mts',
+    entrega1Target: 5460,
+    entrega1Label: 'Entrega 1 - Intersecciones (5460m)',
+    entrega2Target: 2773,
+    entrega2Label: 'Entrega 2 - Troncal (2773m)',
+    finalDeadline: '30/09/2026',
+    category: 'tuberia'
+  },
+  {
+    id: 'CAM-MT',
+    code: 'C-MT',
+    description: 'Cámaras de Media Tensión (MT)',
+    targetQuantity: 27,
     unit: 'unidades',
-    entrega1Target: 10,
+    entrega1Target: 22,
+    entrega1Label: 'Entrega 1 - Intersecciones (22 und)',
     entrega2Target: 5,
-    finalDeadline: '01/08/2026',
+    entrega2Label: 'Entrega 2 - Troncal (5 und)',
+    finalDeadline: '15/09/2026',
     category: 'camara'
   },
   {
-    id: 'CAM-858',
-    code: 'CAM-858',
-    description: 'Cámaras Telecom SB858 (0.9m x 0.9m)',
-    targetQuantity: 10,
+    id: 'CAM-BT',
+    code: 'C-BT',
+    description: 'Cámaras de Baja Tensión (BT)',
+    targetQuantity: 52,
     unit: 'unidades',
-    entrega1Target: 7,
-    entrega2Target: 3,
-    finalDeadline: '01/08/2026',
+    entrega1Target: 38,
+    entrega1Label: 'Entrega 1 - Intersecciones (38 und)',
+    entrega2Target: 14,
+    entrega2Label: 'Entrega 2 - Troncal (14 und)',
+    finalDeadline: '30/09/2026',
+    category: 'camara'
+  },
+  {
+    id: 'CAM-DATOS',
+    code: 'C-DATOS',
+    description: 'Cámaras de Datos / Telecomunicación',
+    targetQuantity: 45,
+    unit: 'unidades',
+    entrega1Target: 37,
+    entrega1Label: 'Entrega 1 - Intersecciones (37 und)',
+    entrega2Target: 8,
+    entrega2Label: 'Entrega 2 - Troncal (8 und)',
+    finalDeadline: '30/09/2026',
     category: 'camara'
   }
 ];
@@ -64,14 +94,14 @@ export const INITIAL_PROJECT_META: ProjectMeta = {
   inspectorName: 'Ing. Jhean Murillo',
   contractorName: 'Consorcio Telecom & Energía Norte',
   inspectionDate: new Date().toISOString().split('T')[0],
-  sectorLocation: 'Planta Principal - Manzana A y B (Lotes 1-24)'
+  sectorLocation: 'Proyecto Ductado y Cámaras - Intersecciones 1, 2 y Troncal'
 };
 
 export const INITIAL_AREAS: AreaSector[] = [
   {
     id: 1,
-    code: 'SEC-01',
-    name: 'Sector A - Subestación & Entrada',
+    code: 'INT-01',
+    name: 'Intersección 1',
     color: AREA_COLOR_PALETTE[0],
     points: [
       { x: 80, y: 80 },
@@ -82,8 +112,8 @@ export const INITIAL_AREAS: AreaSector[] = [
   },
   {
     id: 2,
-    code: 'SEC-02',
-    name: 'Sector B - Edificio de Control',
+    code: 'INT-02',
+    name: 'Intersección 2',
     color: AREA_COLOR_PALETTE[1],
     points: [
       { x: 460, y: 80 },
@@ -94,9 +124,9 @@ export const INITIAL_AREAS: AreaSector[] = [
   },
   {
     id: 3,
-    code: 'SEC-03',
-    name: 'Sector C - Nave Industrial OESTE',
-    color: AREA_COLOR_PALETTE[3],
+    code: 'TRONCAL',
+    name: 'Troncal',
+    color: AREA_COLOR_PALETTE[2],
     points: [
       { x: 80, y: 390 },
       { x: 880, y: 390 },

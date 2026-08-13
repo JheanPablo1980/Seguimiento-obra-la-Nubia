@@ -159,14 +159,26 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
       if (!matchedItemId) {
         if (el.type === 'line') {
           const pipeDesc = (el.pipes || '').toLowerCase();
-          if (pipeDesc.includes('4"') || pipeDesc.includes('4 pulgadas') || pipeDesc.includes('ø4') || pipeDesc.includes('200502')) {
-            matchedItemId = '200502';
-          } else if (pipeDesc.includes('6"') || pipeDesc.includes('6 pulgadas') || pipeDesc.includes('ø6') || pipeDesc.includes('200503')) {
-            matchedItemId = '200503';
+          if (pipeDesc.includes('datos') || pipeDesc.includes('telecom')) {
+            matchedItemId = 'DUCT-4-DATOS';
+          } else if (pipeDesc.includes('mt') || pipeDesc.includes('media')) {
+            matchedItemId = 'DUCT-4-MT';
+          } else if (pipeDesc.includes('6"') || pipeDesc.includes('bt') || pipeDesc.includes('baja') || pipeDesc.includes('200503')) {
+            matchedItemId = 'DUCT-6-BT';
+          } else {
+            matchedItemId = 'DUCT-4-MT';
           }
         } else if (el.type === 'camera') {
-          if (el.camType === 'SB858') matchedItemId = 'CAM-858';
-          else matchedItemId = 'CAM-850';
+          const camDesc = (el.camType || el.label || '').toLowerCase();
+          if (camDesc.includes('datos') || camDesc.includes('telecom') || camDesc.includes('sb858')) {
+            matchedItemId = 'CAM-DATOS';
+          } else if (camDesc.includes('bt') || camDesc.includes('baja') || camDesc.includes('sb850')) {
+            matchedItemId = 'CAM-BT';
+          } else if (camDesc.includes('mt') || camDesc.includes('media')) {
+            matchedItemId = 'CAM-MT';
+          } else {
+            matchedItemId = 'CAM-BT';
+          }
         }
       }
 
