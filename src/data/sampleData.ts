@@ -84,26 +84,10 @@ export const INITIAL_SCHEDULE_ITEMS: ScheduleItem[] = [
 export function normalizeScheduleItems(items: ScheduleItem[]): ScheduleItem[] {
   if (!items || items.length === 0) return INITIAL_SCHEDULE_ITEMS;
 
-  const isOldSchema = items.some(i => 
-    i.id === '200502' || i.id === '200503' || i.id === 'CAM-850' ||
-    (i.id === 'DUCT-4-MT' && i.targetQuantity !== 1548) ||
-    (i.id === 'DUCT-4-DATOS' && i.targetQuantity !== 1833) ||
-    (i.id === 'DUCT-6-BT' && i.targetQuantity !== 8233) ||
-    (i.id === 'CAM-MT' && i.targetQuantity !== 27) ||
-    (i.id === 'CAM-BT' && i.targetQuantity !== 52) ||
-    (i.id === 'CAM-DATOS' && i.targetQuantity !== 45)
-  );
-
-  const missingCore = INITIAL_SCHEDULE_ITEMS.some(init => !items.some(i => i.id === init.id || i.code === init.code));
-
-  if (isOldSchema || missingCore) {
-    return INITIAL_SCHEDULE_ITEMS;
-  }
-
   return items.map(item => {
     const desc = (item.description || '').toLowerCase();
     let newUnit = item.unit;
-    if (desc.includes('camara') || desc.includes('cámara') || desc.includes('caja')) {
+    if (desc.includes('camara') || desc.includes('cámara') || desc.includes('caja') || desc.includes('buzon')) {
       newUnit = 'und';
     } else if (
       desc.includes('canalizacion') ||
@@ -111,24 +95,28 @@ export function normalizeScheduleItems(items: ScheduleItem[]): ScheduleItem[] {
       desc.includes('tuberia') ||
       desc.includes('tubería') ||
       desc.includes('ducto') ||
-      desc.includes('tubo')
+      desc.includes('tubo') ||
+      desc.includes('fibra')
     ) {
       newUnit = 'mts';
     }
 
     let target = item.targetQuantity;
-    const code = (item.code || '').toLowerCase();
-    if (item.id === 'DUCT-4-MT' || code.includes('d-4-mt') || desc.includes('4" mt')) target = 1548;
-    else if (item.id === 'DUCT-4-DATOS' || code.includes('d-4-datos') || desc.includes('4" datos')) target = 1833;
-    else if (item.id === 'DUCT-6-BT' || code.includes('d-6-bt') || desc.includes('6" bt')) target = 8233;
-    else if (item.id === 'CAM-MT' || code.includes('c-mt') || (desc.includes('cámara') && desc.includes('media'))) target = 27;
-    else if (item.id === 'CAM-BT' || code.includes('c-bt') || (desc.includes('cámara') && desc.includes('baja'))) target = 52;
-    else if (item.id === 'CAM-DATOS' || code.includes('c-datos') || (desc.includes('cámara') && desc.includes('datos'))) target = 45;
+    if (target === undefined || target === null || isNaN(Number(target)) || Number(target) <= 0) {
+      const code = (item.code || '').toLowerCase();
+      if (item.id === 'DUCT-4-MT' || code.includes('d-4-mt') || desc.includes('4" mt')) target = 1548;
+      else if (item.id === 'DUCT-4-DATOS' || code.includes('d-4-datos') || desc.includes('4" datos')) target = 1833;
+      else if (item.id === 'DUCT-6-BT' || code.includes('d-6-bt') || desc.includes('6" bt')) target = 8233;
+      else if (item.id === 'CAM-MT' || code.includes('c-mt') || (desc.includes('cámara') && desc.includes('media'))) target = 27;
+      else if (item.id === 'CAM-BT' || code.includes('c-bt') || (desc.includes('cámara') && desc.includes('baja'))) target = 52;
+      else if (item.id === 'CAM-DATOS' || code.includes('c-datos') || (desc.includes('cámara') && desc.includes('datos'))) target = 45;
+      else target = 100;
+    }
 
     return {
       ...item,
       unit: newUnit,
-      targetQuantity: target
+      targetQuantity: Number(target)
     };
   });
 }

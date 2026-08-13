@@ -3,7 +3,7 @@ import { ScheduleItem, InspectionElement, AreaSector, AuthUser } from '../types'
 import { INITIAL_SCHEDULE_ITEMS, DEFAULT_CONTRACTUAL_ITEMS, normalizeScheduleItems } from '../data/sampleData';
 import { normalizeActa, getAvailableActas } from '../utils/actaUtils';
 import { detectColumnMapping, applyMappingToRows, REQUIRED_FIELDS, HEADER_ALIASES } from '../utils/importUtils';
-import { calcularAvancePorCronograma } from '../utils/cronogramaUtils';
+import { calcularAvancePorCronograma, matchElementToScheduleId } from '../utils/cronogramaUtils';
 import { 
   X, 
   CalendarCheck, 
@@ -69,6 +69,71 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
   const [selectedSectorFilter, setSelectedSectorFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showPendienteTotal, setShowPendienteTotal] = useState<boolean>(true);
+  const [elementFilterType, setElementFilterType] = useState<'all' | 'line' | 'camera'>('all');
+  const [elementFilterScheduleItem, setElementFilterScheduleItem] = useState<string>('all');
+
+  const filteredElements = useMemo(() => {
+    return elements.filter(el => {
+      if (elementFilterType === 'line' && el.type !== 'line') return false;
+      if (elementFilterType === 'camera' && el.type !== 'camera') return false;
+
+      if (elementFilterScheduleItem !== 'all') {
+        if (elementFilterScheduleItem === 'unlinked') {
+          if (el.scheduleItemId) return false;
+        } else {
+          const matchedItem = scheduleItems.find(
+            i => i.id === elementFilterScheduleItem || i.code === elementFilterScheduleItem
+          );
+          if (!matchedItem) return false;
+          if (el.scheduleItemId !== matchedItem.id && el.scheduleItemId !== matchedItem.code) return false;
+        }
+      }
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const labelMatch = (el.label || '').toLowerCase().includes(q);
+        const pipeMatch = (el.pipes || '').toLowerCase().includes(q);
+        const camMatch = (el.camType || '').toLowerCase().includes(q);
+        const codeMatch = (el.scheduleItemId || '').toLowerCase().includes(q);
+        if (!labelMatch && !pipeMatch && !camMatch && !codeMatch) return false;
+      }
+
+      return true;
+    });
+  }, [elements, elementFilterType, elementFilterScheduleItem, searchQuery, scheduleItems]);
+
+  const handleAutoLinkAllElements = () => {
+    let updatedCount = 0;
+    elements.forEach(el => {
+      let matchedId = el.scheduleItemId;
+      const currentMatched = scheduleItems.find(i => i.id === matchedId || i.code === matchedId);
+
+      if (!currentMatched) {
+        if (el.type === 'line') {
+          const pipeDesc = (el.pipes || '').toLowerCase();
+          if (pipeDesc.includes('datos') || pipeDesc.includes('telecom')) matchedId = 'DUCT-4-DATOS';
+          else if (pipeDesc.includes('mt') || pipeDesc.includes('media')) matchedId = 'DUCT-4-MT';
+          else if (pipeDesc.includes('6"') || pipeDesc.includes('bt') || pipeDesc.includes('baja')) matchedId = 'DUCT-6-BT';
+          else matchedId = 'DUCT-4-MT';
+        } else if (el.type === 'camera') {
+          const camDesc = (el.camType || el.label || '').toLowerCase();
+          if (camDesc.includes('datos') || camDesc.includes('telecom')) matchedId = 'CAM-DATOS';
+          else if (camDesc.includes('bt') || camDesc.includes('baja')) matchedId = 'CAM-BT';
+          else if (camDesc.includes('mt') || camDesc.includes('media')) matchedId = 'CAM-MT';
+          else matchedId = 'CAM-BT';
+        }
+        if (matchedId) {
+          onUpdateElement({ ...el, scheduleItemId: matchedId });
+          updatedCount++;
+        }
+      } else if (currentMatched && el.scheduleItemId !== currentMatched.id) {
+        // Standardize code to ID
+        onUpdateElement({ ...el, scheduleItemId: currentMatched.id });
+        updatedCount++;
+      }
+    });
+    showToast(`¡Se vincularon ${updatedCount} elementos de la bitácora con sus IDs de cronograma!`);
+  };
 
   // Form for adding / editing schedule item
   const [editingItem, setEditingItem] = useState<ScheduleItem | null>(null);
@@ -156,12 +221,19 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
       // Find matching schedule item: either explicit scheduleItemId or auto-match
       let matchedItemId = el.scheduleItemId;
 
-      if (!matchedItemId) {
+      if (matchedItemId) {
+        const directMatch = scheduleItems.find(i => i.id === matchedItemId || i.code === matchedItemId);
+        if (directMatch) {
+          matchedItemId = directMatch.id;
+        }
+      }
+
+      if (!matchedItemId || !map[matchedItemId]) {
         if (el.type === 'line') {
           const pipeDesc = (el.pipes || '').toLowerCase();
           if (pipeDesc.includes('datos') || pipeDesc.includes('telecom')) {
             matchedItemId = 'DUCT-4-DATOS';
-          } else if (pipeDesc.includes('mt') || pipeDesc.includes('media')) {
+          } else if (pipeDesc.includes('mt') || pipeDesc.includes('media') || pipeDesc.includes('200502')) {
             matchedItemId = 'DUCT-4-MT';
           } else if (pipeDesc.includes('6"') || pipeDesc.includes('bt') || pipeDesc.includes('baja') || pipeDesc.includes('200503')) {
             matchedItemId = 'DUCT-6-BT';
@@ -560,9 +632,66 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
   };
 
   const handleSyncMetasAndUnits = () => {
-    const normalized = normalizeScheduleItems(scheduleItems);
-    onUpdateScheduleItems(normalized);
-    showToast('¡Metas y unidades actualizadas según plano/bitácora! (Cámaras/Cajas: und | Canalizaciones/Tuberías: mts)');
+    let updatedCount = 0;
+    const updatedSchedule = scheduleItems.map(item => {
+      const descLower = (item.description || '').toLowerCase();
+      const codeUpper = (item.code || '').toUpperCase();
+
+      let unit = item.unit || 'mts';
+      if (
+        descLower.includes('camara') || descLower.includes('cámara') ||
+        descLower.includes('caja') || descLower.includes('buzon') || descLower.includes('buzón') ||
+        codeUpper.startsWith('CAM') || codeUpper.startsWith('C-') || item.category === 'camara'
+      ) {
+        unit = 'und';
+      } else if (
+        descLower.includes('canalizacion') || descLower.includes('canalización') ||
+        descLower.includes('tuberia') || descLower.includes('tubería') ||
+        descLower.includes('ducto') || descLower.includes('tubo') || descLower.includes('fibra') ||
+        codeUpper.startsWith('DUCT') || codeUpper.startsWith('D-') || item.category === 'tuberia'
+      ) {
+        unit = 'mts';
+      }
+
+      // Find all matching elements in bitácora
+      const matchingEls = elements.filter(el => 
+        matchElementToScheduleId(el, item.id) || matchElementToScheduleId(el, item.code)
+      );
+
+      let bitacoraTotal = 0;
+      if (matchingEls.length > 0) {
+        if (unit === 'mts') {
+          bitacoraTotal = matchingEls.reduce((acc, el) => {
+            if (el.type === 'line') {
+              return acc + (Number(el.meters) || 0);
+            }
+            return acc;
+          }, 0);
+        } else {
+          bitacoraTotal = matchingEls.reduce((acc, el) => {
+            if (el.type === 'camera') {
+              return acc + 1;
+            } else {
+              return acc + 1;
+            }
+          }, 0);
+        }
+      }
+
+      const newTarget = bitacoraTotal > 0 ? bitacoraTotal : (item.targetQuantity || 100);
+      if (newTarget !== item.targetQuantity || unit !== item.unit) {
+        updatedCount++;
+      }
+
+      return {
+        ...item,
+        unit,
+        targetQuantity: newTarget
+      };
+    });
+
+    onUpdateScheduleItems(updatedSchedule);
+    showToast(`¡Metas y unidades del cronograma sincronizadas desde la bitácora! (${updatedCount} rubros actualizados)`);
   };
 
   const handleLoadDefaultTemplate = () => {
@@ -984,14 +1113,113 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
           {/* TAB 3: ELEMENT BY ELEMENT DETAIL AND SCHEDULING LINK */}
           {activeTab === 'byElement' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-                  <Ruler className="w-4 h-4 text-sky-400" />
-                  <span>Asignación Individual de Rubro de Cronograma a Tramos y Cámaras</span>
-                </h3>
-                <span className="text-xs text-slate-400">{elements.length} elementos en bitácora</span>
+              <div className="flex items-center justify-between gap-3 flex-wrap bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
+                    <Ruler className="w-4 h-4 text-sky-400" />
+                    <span>Vinculación de Tramos y Cámaras con el Cronograma</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Detalle individual de tramos y cámaras de la bitácora vinculados con sus IDs únicos del cronograma.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAutoLinkAllElements}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/50 transition flex items-center gap-1.5 shadow-sm"
+                    title="Asignar automáticamente el ID único del cronograma a todos los tramos y cámaras según su especificación"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Auto-Vincular Todos con Cronograma</span>
+                  </button>
+                </div>
               </div>
 
+              {/* KPI Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Elementos</span>
+                    <span className="text-base font-black text-white font-mono">{elements.length}</span>
+                  </div>
+                  <Ruler className="w-5 h-5 text-sky-400 opacity-60" />
+                </div>
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Vinculados</span>
+                    <span className="text-base font-black text-emerald-400 font-mono">
+                      {elements.filter(e => e.scheduleItemId).length} <span className="text-xs text-slate-500">/ {elements.length}</span>
+                    </span>
+                  </div>
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 opacity-60" />
+                </div>
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Longitud Tramos</span>
+                    <span className="text-base font-black text-amber-300 font-mono">
+                      {elements.filter(e => e.type === 'line').reduce((acc, e) => acc + (e.meters || 0), 0)}m
+                    </span>
+                  </div>
+                  <TrendingUp className="w-5 h-5 text-amber-400 opacity-60" />
+                </div>
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Cámaras / Cajas</span>
+                    <span className="text-base font-black text-purple-300 font-mono">
+                      {elements.filter(e => e.type === 'camera').length} und
+                    </span>
+                  </div>
+                  <Layers className="w-5 h-5 text-purple-400 opacity-60" />
+                </div>
+              </div>
+
+              {/* Filter Controls Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">
+                    <Search className="w-3.5 h-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Buscar ID, tramo o norma..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="bg-transparent text-slate-200 focus:outline-none text-xs w-44"
+                    />
+                  </div>
+
+                  <select
+                    value={elementFilterType}
+                    onChange={(e) => setElementFilterType(e.target.value as any)}
+                    className="bg-slate-900 text-slate-200 border border-slate-800 rounded-lg px-2.5 py-1 text-xs focus:outline-none"
+                  >
+                    <option value="all">Todos los Tipos (Tramos y Cámaras)</option>
+                    <option value="line">Solo Tramos (Tuberías)</option>
+                    <option value="camera">Solo Cámaras / Cajas</option>
+                  </select>
+
+                  <select
+                    value={elementFilterScheduleItem}
+                    onChange={(e) => setElementFilterScheduleItem(e.target.value)}
+                    className="bg-slate-900 text-slate-200 border border-slate-800 rounded-lg px-2.5 py-1 text-xs focus:outline-none"
+                  >
+                    <option value="all">Todos los Rubros del Cronograma</option>
+                    <option value="unlinked">-- Sin Vincular --</option>
+                    {scheduleItems.map(item => (
+                      <option key={item.id} value={item.id}>
+                        [{item.code}] {item.description}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <span className="text-slate-400 text-[11px] font-mono">
+                  Mostrando {filteredElements.length} de {elements.length}
+                </span>
+              </div>
+
+              {/* Elements Table */}
               <div className="border border-slate-800 rounded-xl overflow-x-auto bg-slate-950">
                 <table className="w-full text-left text-xs">
                   <thead>
@@ -1001,56 +1229,84 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                       <th className="p-2.5">Especificación Tubería / Cámara</th>
                       <th className="p-2.5">Longitud / Medida</th>
                       <th className="p-2.5">Sector</th>
-                      <th className="p-2.5">Estado</th>
-                      <th className="p-2.5 min-w-[200px]">Código Cronograma Asignado</th>
+                      <th className="p-2.5">% Avance (Bitácora)</th>
+                      <th className="p-2.5">Ejecución Real</th>
+                      <th className="p-2.5 min-w-[240px]">ID Único Cronograma Enlazado</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/80">
-                    {elements.map(el => (
-                      <tr key={el.id} className="hover:bg-slate-800/40 transition">
-                        <td className="p-2.5 font-bold text-sky-300 font-mono">
-                          {el.label}
-                        </td>
-                        <td className="p-2.5 capitalize text-slate-300">
-                          {el.type === 'camera' ? 'Cámara' : 'Tramo'}
-                        </td>
-                        <td className="p-2.5 font-mono text-[11px] text-amber-300">
-                          {el.type === 'line' ? (el.pipes || 'Sin especif.') : (el.camType || 'SB850')}
-                        </td>
-                        <td className="p-2.5 font-mono text-slate-200">
-                          {el.type === 'line' ? `${el.meters || 0}m` : '1 unidad'}
-                        </td>
-                        <td className="p-2.5 text-slate-400 text-[11px]">
-                          {getAreaNameForElement(el)}
-                        </td>
-                        <td className="p-2.5">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            el.status === 'Terminado' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
-                            el.status === 'En proceso' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
-                            'bg-slate-800 text-slate-300'
-                          }`}>
-                            {el.status}
-                          </span>
-                        </td>
-                        <td className="p-2.5">
-                          <select
-                            value={el.scheduleItemId || ''}
-                            onChange={(e) => {
-                              onUpdateElement({ ...el, scheduleItemId: e.target.value || undefined });
-                              showToast(`Elemento ${el.label} vinculado a ${e.target.value || 'Sin código'}`);
-                            }}
-                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-indigo-300 font-mono font-bold focus:outline-none focus:border-indigo-500"
-                          >
-                            <option value="">-- Sin Vincular --</option>
-                            {scheduleItems.map(item => (
-                              <option key={item.id} value={item.id}>
-                                [{item.code}] {item.description}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredElements.map(el => {
+                      const currentItem = scheduleItems.find(
+                        item => item.id === el.scheduleItemId || item.code === el.scheduleItemId
+                      );
+                      const selectedVal = currentItem ? currentItem.id : (el.scheduleItemId || '');
+
+                      const elProgress = el.progressPercent !== undefined ? el.progressPercent : (
+                        el.status === 'Terminado' ? 100 : (el.status === 'En proceso' ? 50 : 0)
+                      );
+
+                      const executedQty = el.type === 'line' 
+                        ? `${((el.meters || 0) * (elProgress / 100)).toFixed(1)}m` 
+                        : (elProgress >= 100 ? '1 und' : '0 und');
+
+                      return (
+                        <tr key={el.id} className="hover:bg-slate-800/40 transition">
+                          <td className="p-2.5 font-bold text-sky-300 font-mono">
+                            {el.label}
+                          </td>
+                          <td className="p-2.5 capitalize text-slate-300">
+                            {el.type === 'camera' ? 'Cámara' : 'Tramo'}
+                          </td>
+                          <td className="p-2.5 font-mono text-[11px] text-amber-300">
+                            {el.type === 'line' ? (el.pipes || 'Sin especif.') : (el.camType || 'SB850')}
+                          </td>
+                          <td className="p-2.5 font-mono text-slate-200">
+                            {el.type === 'line' ? `${el.meters || 0}m` : '1 unidad'}
+                          </td>
+                          <td className="p-2.5 text-slate-400 text-[11px]">
+                            {getAreaNameForElement(el)}
+                          </td>
+                          <td className="p-2.5">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                              elProgress >= 100 ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                              elProgress > 0 ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                              'bg-slate-800 text-slate-400'
+                            }`}>
+                              {elProgress}% ({el.status})
+                            </span>
+                          </td>
+                          <td className="p-2.5 font-mono font-bold text-emerald-400 text-[11px]">
+                            {executedQty}
+                          </td>
+                          <td className="p-2.5">
+                            <div className="flex items-center gap-1.5">
+                              {currentItem && (
+                                <span className="px-1.5 py-0.5 rounded bg-indigo-950 border border-indigo-700 text-indigo-300 text-[10px] font-mono font-bold shrink-0">
+                                  {currentItem.code}
+                                </span>
+                              )}
+                              <select
+                                value={selectedVal}
+                                onChange={(e) => {
+                                  const targetId = e.target.value || undefined;
+                                  onUpdateElement({ ...el, scheduleItemId: targetId });
+                                  const targetItem = scheduleItems.find(i => i.id === targetId);
+                                  showToast(`Elemento ${el.label} vinculado a ${targetItem ? `[${targetItem.code}] ${targetItem.description}` : 'Sin código'}`);
+                                }}
+                                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-indigo-200 font-mono focus:outline-none focus:border-indigo-500"
+                              >
+                                <option value="">-- Sin Vincular --</option>
+                                {scheduleItems.map(item => (
+                                  <option key={item.id} value={item.id}>
+                                    [{item.code}] {item.description}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
