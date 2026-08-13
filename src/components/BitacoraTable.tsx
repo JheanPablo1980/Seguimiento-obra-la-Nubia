@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { InspectionElement, FilterState, StatusType, CameraNorm, GlobalConfig, ContractualItem } from '../types';
+import { InspectionElement, FilterState, StatusType, CameraNorm, GlobalConfig, ContractualItem, ProjectLayer } from '../types';
 import { DEFAULT_CONTRACTUAL_ITEMS } from '../data/sampleData';
 import { formatExecutionTime } from '../utils/timeUtils';
 import { adjustTramoMeters } from '../utils/tramoUtils';
 import { normalizeActa, getAvailableActas } from '../utils/actaUtils';
 import { getElementPhotoRecords } from '../utils/photoUtils';
+import { normalizeLayer, LAYER_CONFIG, ELECTRICAL_NODE_TYPES } from '../utils/layerUtils';
 import { 
   ClipboardList, 
   Plus, 
@@ -17,7 +18,9 @@ import {
   Activity,
   Camera,
   LayoutGrid,
-  Table
+  Table,
+  Zap,
+  Layers
 } from 'lucide-react';
 
 interface BitacoraTableProps {
@@ -83,8 +86,14 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
   // Generate list of actas based on configured totalActas (default 10) plus any custom assigned actas
   const availableActas = getAvailableActas(elements, globalConfig?.totalActas || 10);
 
-  // Apply tab, date, status, search filtering
+  // Apply layer, tab, date, status, search filtering
   const filteredElements = elements.filter(el => {
+    // Layer filter
+    if (filter.layerFilter && filter.layerFilter !== 'all') {
+      const elLayer = normalizeLayer(el.layer);
+      if (elLayer !== filter.layerFilter) return false;
+    }
+
     if (filter.activeTab !== 'all' && el.type !== filter.activeTab) return false;
 
     if (filter.startDate && el.date < filter.startDate) return false;
@@ -103,7 +112,9 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
       const matchItem = el.itemCobro?.toLowerCase().includes(q) ?? false;
       const matchDesc = el.itemDescripcion?.toLowerCase().includes(q) ?? false;
       const matchObs = el.observations?.toLowerCase().includes(q) ?? false;
-      if (!matchLabel && !matchPipes && !matchCables && !matchNorm && !matchActa && !matchItem && !matchDesc && !matchObs) return false;
+      const matchCircuit = el.circuitTag?.toLowerCase().includes(q) ?? false;
+      const matchElectNode = el.electricNodeType?.toLowerCase().includes(q) ?? false;
+      if (!matchLabel && !matchPipes && !matchCables && !matchNorm && !matchActa && !matchItem && !matchDesc && !matchObs && !matchCircuit && !matchElectNode) return false;
     }
 
     return true;
@@ -116,44 +127,153 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
   };
 
   const countAll = elements.length;
+  const countCivil = elements.filter(e => normalizeLayer(e.layer) === 'civil').length;
+  const countElectrica = elements.filter(e => normalizeLayer(e.layer) === 'electrica').length;
   const countCameras = elements.filter(e => e.type === 'camera').length;
   const countTramos = elements.filter(e => e.type === 'line').length;
+
+  const handleAddElectricalNode = () => {
+    const nodeCount = elements.filter(e => e.type === 'camera' && normalizeLayer(e.layer) === 'electrica').length + 1;
+    const newEl: InspectionElement = {
+      id: Date.now() + Math.floor(Math.random() * 100000),
+      type: 'camera',
+      layer: 'electrica',
+      electricNodeType: 'tablero',
+      label: `TD-${String(nodeCount).padStart(2, '0')}`,
+      status: 'Pendiente',
+      x: 320,
+      y: 280,
+      voltage: 220,
+      circuitTag: 'ALIM-TG-01',
+      date: new Date().toISOString().split('T')[0]
+    };
+    onUpdateElement(newEl);
+  };
+
+  const handleAddElectricalCircuit = () => {
+    const circCount = elements.filter(e => e.type === 'line' && normalizeLayer(e.layer) === 'electrica').length + 1;
+    const newEl: InspectionElement = {
+      id: Date.now() + Math.floor(Math.random() * 100000),
+      type: 'line',
+      layer: 'electrica',
+      label: `Circuito C-${String(circCount).padStart(2, '0')}`,
+      status: 'Pendiente',
+      x: 220,
+      y: 220,
+      x2: 380,
+      y2: 220,
+      meters: 30,
+      pipes: 'Ducto EMT Ø 1 1/2"',
+      cables: '3#8 AWG Cu THHN + 1#10T',
+      circuitTag: `CIR-ALUM-${String(circCount).padStart(2, '0')}`,
+      date: new Date().toISOString().split('T')[0]
+    };
+    onUpdateElement(newEl);
+  };
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex flex-col gap-3">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 flex-wrap gap-2">
         <div>
           <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
             <ClipboardList className="w-4 h-4 text-sky-600" />
-            <span>Bitácora de Inspección</span>
+            <span>Bitácora de Inspección Multicapa</span>
           </h2>
-          <p className="text-xs text-slate-400">Listado de cámaras y tramos canalizados</p>
+          <p className="text-xs text-slate-400">Obras Civiles y Obras Eléctricas integradas</p>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           {appMode === 'admin' && elements.length > 0 && onDeleteAllElements && (
             <button
               onClick={onDeleteAllElements}
-              className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition"
+              className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs transition"
               title="Borrar todos los tramos y cámaras de la bitácora y del plano"
             >
               <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-              <span>Borrar Tramos y Cámaras</span>
+              <span>Borrar Todo</span>
             </button>
           )}
+
+          {/* Civil Adders */}
+          <div className="flex items-center rounded-lg border border-amber-300 bg-amber-50/70 p-0.5 shadow-2xs gap-0.5">
+            <button
+              onClick={onAddCamera}
+              className="bg-amber-600 hover:bg-amber-500 text-white px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
+              title="Agregar Cámara / Caja de Inspección Civil"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Cámara</span>
+            </button>
+            <button
+              onClick={onAddTramo}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
+              title="Agregar Tramo de Canalización Civil"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Tramo</span>
+            </button>
+          </div>
+
+          {/* Electric Adders */}
+          <div className="flex items-center rounded-lg border border-cyan-400 bg-cyan-50/70 p-0.5 shadow-2xs gap-0.5">
+            <button
+              onClick={handleAddElectricalNode}
+              className="bg-cyan-700 hover:bg-cyan-600 text-white px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
+              title="Agregar Nodo Eléctrico (Tablero / Transformador / Luminaria)"
+            >
+              <Zap className="w-3 h-3 text-amber-300" />
+              <span>Nodo Eléc.</span>
+            </button>
+            <button
+              onClick={handleAddElectricalCircuit}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
+              title="Agregar Circuito / Conductor Eléctrico"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Circuito</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Layer Filter Tabs Bar */}
+      <div className="flex items-center justify-between gap-1 p-1 bg-slate-900 rounded-xl text-xs">
+        <div className="flex items-center gap-1 flex-1">
+          <span className="text-[11px] font-black uppercase text-slate-400 px-2 flex items-center gap-1 shrink-0">
+            <Layers className="w-3.5 h-3.5 text-sky-400" /> Capa:
+          </span>
           <button
-            onClick={onAddCamera}
-            className="bg-rose-600 hover:bg-rose-500 text-white px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition"
+            type="button"
+            onClick={() => onFilterChange({ ...filter, layerFilter: 'all' })}
+            className={`px-3 py-1 rounded-lg font-extrabold transition flex items-center gap-1.5 ${
+              !filter.layerFilter || filter.layerFilter === 'all'
+                ? 'bg-sky-500 text-white shadow-sm'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
           >
-            <Plus className="w-3 h-3" />
-            <span>Cámara</span>
+            <span>Todas ({countAll})</span>
           </button>
           <button
-            onClick={onAddTramo}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition"
+            type="button"
+            onClick={() => onFilterChange({ ...filter, layerFilter: 'civil' })}
+            className={`px-3 py-1 rounded-lg font-extrabold transition flex items-center gap-1.5 ${
+              filter.layerFilter === 'civil'
+                ? 'bg-amber-500 text-slate-950 shadow-sm font-black'
+                : 'text-amber-300 hover:bg-amber-950/50'
+            }`}
           >
-            <Plus className="w-3 h-3" />
-            <span>Tramo</span>
+            <span>🏗️ Civiles ({countCivil})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onFilterChange({ ...filter, layerFilter: 'electrica' })}
+            className={`px-3 py-1 rounded-lg font-extrabold transition flex items-center gap-1.5 ${
+              filter.layerFilter === 'electrica'
+                ? 'bg-cyan-400 text-slate-950 shadow-sm font-black'
+                : 'text-cyan-300 hover:bg-cyan-950/50'
+            }`}
+          >
+            <span>⚡ Eléctricas ({countElectrica})</span>
           </button>
         </div>
       </div>
@@ -176,7 +296,7 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
             }`}
           >
             <MapPin className="w-3.5 h-3.5 text-rose-500" />
-            <span>Cámaras ({countCameras})</span>
+            <span>Cámaras / Nodos ({countCameras})</span>
           </button>
           <button
             onClick={() => onFilterChange({ ...filter, activeTab: 'line' })}
@@ -185,16 +305,16 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
             }`}
           >
             <Ruler className="w-3.5 h-3.5 text-sky-600" />
-            <span>Tramos ({countTramos})</span>
+            <span>Tramos / Circuitos ({countTramos})</span>
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
             <input
               type="text"
-              placeholder="Buscar cámara, tramo, tubería, cable..."
+              placeholder="Buscar por tag, circuito, nodo, tubería, conductor, acta..."
               value={filter.searchQuery}
               onChange={(e) => onFilterChange({ ...filter, searchQuery: e.target.value })}
               className="w-full pl-8 pr-2.5 py-1.5 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-sky-500 focus:outline-none"
@@ -256,28 +376,53 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
           {filteredElements.length === 0 ? (
             <div className="py-8 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200 p-4">
               <ClipboardList className="w-8 h-8 text-slate-300 mx-auto mb-1" />
-              <p className="font-bold text-slate-600">No hay elementos en esta categoría</p>
-              <p className="text-[11px] text-slate-400">Dibuja un tramo o agrega una cámara en el plano para inspeccionar.</p>
+              <p className="font-bold text-slate-600">No hay elementos en este filtro</p>
+              <p className="text-[11px] text-slate-400">Dibuja un tramo civil o circuito eléctrico para comenzar.</p>
             </div>
           ) : (
             filteredElements.map((el) => {
               const sectorName = getAreaNameForElement ? getAreaNameForElement(el) : null;
+              const elLayer = normalizeLayer(el.layer);
+              const isElect = elLayer === 'electrica';
+
               return (
-                <div key={el.id} className="bg-white border border-slate-200 hover:border-sky-300 rounded-xl p-3 shadow-xs space-y-2.5 transition">
-                  {/* Header Row: Label & Status Buttons */}
+                <div key={el.id} className={`bg-white border ${isElect ? 'border-cyan-300 hover:border-cyan-500' : 'border-amber-300 hover:border-amber-500'} rounded-xl p-3 shadow-xs space-y-2.5 transition`}>
+                  {/* Header Row: Label, Layer Switcher & Status Buttons */}
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       {el.type === 'camera' ? (
-                        <span className="p-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 font-extrabold text-xs flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5 text-rose-600" />
+                        <span className={`p-1.5 rounded-lg font-extrabold text-xs flex items-center gap-1 ${
+                          isElect ? 'bg-cyan-50 border border-cyan-300 text-cyan-800' : 'bg-rose-50 border border-rose-200 text-rose-700'
+                        }`}>
+                          {isElect ? <Zap className="w-3.5 h-3.5 text-amber-500" /> : <MapPin className="w-3.5 h-3.5 text-rose-600" />}
                           <span>{el.label}</span>
                         </span>
                       ) : (
-                        <span className="p-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 font-extrabold text-xs flex items-center gap-1">
+                        <span className={`p-1.5 rounded-lg font-extrabold text-xs flex items-center gap-1 ${
+                          isElect ? 'bg-cyan-50 border border-cyan-300 text-cyan-800' : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                        }`}>
                           <Ruler className="w-3.5 h-3.5 text-emerald-600" />
                           <span>{el.label}</span>
                         </span>
                       )}
+
+                      {/* Layer Toggle Pill */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextLayer: ProjectLayer = isElect ? 'civil' : 'electrica';
+                          onUpdateElement({ ...el, layer: nextLayer });
+                        }}
+                        className={`text-[10px] font-black px-2 py-0.5 rounded-full border transition flex items-center gap-1 cursor-pointer ${
+                          isElect 
+                            ? 'bg-cyan-900 text-cyan-200 border-cyan-700 hover:bg-cyan-800' 
+                            : 'bg-amber-900 text-amber-200 border-amber-700 hover:bg-amber-800'
+                        }`}
+                        title="Haz clic para alternar entre Capa Civil y Capa Eléctrica"
+                      >
+                        <span>{isElect ? '⚡ Eléctrica' : '🏗️ Civil'}</span>
+                      </button>
+
                       {sectorName && (
                         <span className="text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full">
                           {sectorName}
@@ -329,19 +474,30 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                   {/* Specs Details */}
                   <div className="text-xs text-slate-700 space-y-1 bg-slate-50 rounded-lg p-2 border border-slate-100">
                     {el.type === 'camera' ? (
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span><strong>Tipo:</strong> {el.camType || 'SB858'}</span>
-                        {el.voltage && <span><strong>Voltaje:</strong> {el.voltage}V</span>}
+                      <div className="flex items-center justify-between text-[11px] flex-wrap gap-1">
+                        {isElect ? (
+                          <>
+                            <span><strong>Tipo Nodo:</strong> {el.electricNodeType || 'Tablero'}</span>
+                            {el.circuitTag && <span><strong>Circuito:</strong> <span className="font-mono text-cyan-800 font-bold">{el.circuitTag}</span></span>}
+                            {el.voltage && <span><strong>Tensión:</strong> {el.voltage}V</span>}
+                          </>
+                        ) : (
+                          <>
+                            <span><strong>Norma:</strong> {el.camType || 'SB850'}</span>
+                            {el.voltage && <span><strong>Voltaje:</strong> {el.voltage}V</span>}
+                          </>
+                        )}
                       </div>
                     ) : (
                       <>
-                        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-800">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-800 flex-wrap gap-1">
                           <span><strong>Longitud:</strong> {el.meters ? `${el.meters}m` : '-'}</span>
-                          <span><strong>Tubería:</strong> {el.pipes || '-'}</span>
+                          <span><strong>{isElect ? 'Ducto / Canal' : 'Tubería'}:</strong> {el.pipes || '-'}</span>
+                          {el.circuitTag && <span><strong>Circuito:</strong> <span className="font-mono text-cyan-800 font-bold">{el.circuitTag}</span></span>}
                         </div>
                         {el.cables && (
                           <div className="text-[10px] text-slate-500 truncate">
-                            <strong>Conductores:</strong> {el.cables}
+                            <strong>{isElect ? 'Conductores / Calibre:' : 'Conductores:'}</strong> {el.cables}
                           </div>
                         )}
                       </>
@@ -457,6 +613,7 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
           <table className="w-full text-left border-collapse text-sm">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs uppercase font-bold tracking-wider">
+              <th className="py-2 px-2 text-center w-24">Capa</th>
               <th className="py-2 px-3 min-w-[320px]">Elemento / Sector</th>
               <th className="py-2 px-2 text-center min-w-[140px]">Estado</th>
               <th className="py-2 px-2 text-center min-w-[130px]">ID Unico crono</th>
@@ -478,20 +635,39 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
           <tbody>
             {filteredElements.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-8 text-center text-slate-400 text-xs">
+                <td colSpan={10} className="py-8 text-center text-slate-400 text-xs">
                   <div className="flex flex-col items-center gap-1">
                     <ClipboardList className="w-8 h-8 text-slate-300" />
-                    <span>No hay elementos registrados en la bitácora</span>
-                    <span className="text-xs text-slate-400">Dibuja tramos o coloca cámaras en el plano</span>
+                    <span>No hay elementos registrados en la bitácora con los filtros activos</span>
+                    <span className="text-xs text-slate-400">Dibuja tramos o coloca nodos en el plano</span>
                   </div>
                 </td>
               </tr>
             ) : (
               filteredElements.map(el => {
                 const areaBadge = getAreaNameForElement(el);
+                const elLayer = normalizeLayer(el.layer);
+                const isElect = elLayer === 'electrica';
 
                 return (
-                  <tr key={el.id} className="hover:bg-slate-50 transition border-b border-slate-100">
+                  <tr key={el.id} className={`hover:bg-slate-50 transition border-b border-slate-100 ${isElect ? 'bg-cyan-50/20' : ''}`}>
+                    {/* Layer Column with Interactive Switcher */}
+                    <td className="py-2 px-2 text-center" data-label="Capa">
+                      <select
+                        value={elLayer}
+                        onChange={(e) => onUpdateElement({ ...el, layer: e.target.value as ProjectLayer })}
+                        className={`text-[11px] font-bold px-1.5 py-0.5 rounded-lg border cursor-pointer ${
+                          isElect 
+                            ? 'bg-cyan-100 text-cyan-900 border-cyan-300' 
+                            : 'bg-amber-100 text-amber-900 border-amber-300'
+                        }`}
+                        title="Cambiar capa del elemento"
+                      >
+                        <option value="civil">🏗️ Civil</option>
+                        <option value="electrica">⚡ Eléctrica</option>
+                      </select>
+                    </td>
+
                     <td className="py-2 px-3" data-label="Elemento">
                       <div className="flex items-center justify-between gap-1">
                         <input
@@ -500,7 +676,12 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                           onChange={(e) => onUpdateElement({ ...el, label: e.target.value })}
                           className="font-extrabold text-slate-800 text-sm bg-transparent border-b border-transparent hover:border-slate-300 focus:border-sky-500 focus:outline-none w-28"
                         />
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {isElect && el.circuitTag && (
+                            <span className="text-[10px] font-mono font-bold text-cyan-800 bg-cyan-100 px-1.5 py-0.5 rounded border border-cyan-300">
+                              {el.circuitTag}
+                            </span>
+                          )}
                           <span className="text-xs font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
                             {areaBadge}
                           </span>
@@ -514,27 +695,53 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
 
                       {el.type === 'camera' ? (
                         <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                          <span className="text-xs text-slate-500 font-semibold">Norma:</span>
-                          <select
-                            value={el.camType || 'SB850'}
-                            onChange={(e) => onUpdateElement({ ...el, camType: e.target.value as CameraNorm })}
-                            className="text-xs px-1.5 py-0.5 border border-slate-200 rounded font-mono bg-white"
-                          >
-                            <option value="SB858">SB858 (Comunicaciones)</option>
-                            <option value="SB850">SB850 (BT)</option>
-                            <option value="SB851">SB851 (MT)</option>
-                            <option value="SB853">SB853 (MT)</option>
-                          </select>
+                          {isElect ? (
+                            <>
+                              <span className="text-xs text-cyan-700 font-semibold">Nodo:</span>
+                              <select
+                                value={el.electricNodeType || 'tablero'}
+                                onChange={(e) => onUpdateElement({ ...el, electricNodeType: e.target.value })}
+                                className="text-xs px-1.5 py-0.5 border border-cyan-300 rounded font-semibold bg-white text-cyan-900"
+                              >
+                                {ELECTRICAL_NODE_TYPES.map(n => (
+                                  <option key={n.id} value={n.id}>{n.icon} {n.label}</option>
+                                ))}
+                              </select>
+                              <input
+                                type="text"
+                                placeholder="Circuito ej: ALIM-01"
+                                value={el.circuitTag || ''}
+                                onChange={(e) => onUpdateElement({ ...el, circuitTag: e.target.value })}
+                                className="w-24 text-[11px] px-1 py-0.5 border border-slate-200 rounded font-mono"
+                              />
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-xs text-slate-500 font-semibold">Norma:</span>
+                              <select
+                                value={el.camType || 'SB850'}
+                                onChange={(e) => onUpdateElement({ ...el, camType: e.target.value as CameraNorm })}
+                                className="text-xs px-1.5 py-0.5 border border-slate-200 rounded font-mono bg-white"
+                              >
+                                <option value="SB858">SB858 (Comunicaciones)</option>
+                                <option value="SB850">SB850 (BT)</option>
+                                <option value="SB851">SB851 (MT)</option>
+                                <option value="SB853">SB853 (MT)</option>
+                              </select>
+                            </>
+                          )}
                         </div>
                       ) : (
                         <div className="mt-1.5 space-y-1.5 bg-slate-50/80 p-1.5 rounded-lg border border-slate-200/80 text-xs">
                           {/* First row: Tubería & Cables */}
                           <div className="grid grid-cols-2 gap-2">
                             <div className="min-w-0">
-                              <span className="text-xs text-slate-500 font-semibold block mb-0.5">Tubería</span>
+                              <span className="text-xs text-slate-500 font-semibold block mb-0.5">
+                                {isElect ? 'Ducto / Canal' : 'Tubería'}
+                              </span>
                               <input
                                 type="text"
-                                placeholder="Ej: 3x4 pulg"
+                                placeholder={isElect ? 'Ej: Ducto EMT Ø 1 1/2"' : 'Ej: 3x4 pulg'}
                                 value={el.pipes || ''}
                                 onChange={(e) => onUpdateElement({ ...el, pipes: e.target.value })}
                                 className="w-full px-2 py-1 border border-slate-200 rounded bg-white text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-500"
@@ -543,7 +750,9 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
 
                             <div className="min-w-0">
                               <div className="flex items-center justify-between mb-0.5 gap-1">
-                                <span className="text-xs text-slate-500 font-semibold truncate">Cables</span>
+                                <span className="text-xs text-slate-500 font-semibold truncate">
+                                  {isElect ? 'Conductores' : 'Cables'}
+                                </span>
                                 <label className="text-[10px] text-amber-800 bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-300 font-bold flex items-center gap-1 cursor-pointer shrink-0 hover:bg-amber-100">
                                   <input
                                     type="checkbox"
@@ -560,7 +769,7 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                               </div>
                               <input
                                 type="text"
-                                placeholder="Ej: FO 24 FO"
+                                placeholder={isElect ? 'Ej: 3#8 AWG THHN + 1#10T' : 'Ej: FO 24 FO'}
                                 disabled={el.onlyPipes}
                                 value={el.onlyPipes ? 'N/A (Solo Tubería)' : (el.cables || '')}
                                 onChange={(e) => onUpdateElement({ ...el, cables: e.target.value })}

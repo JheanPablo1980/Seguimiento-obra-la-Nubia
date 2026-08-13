@@ -1,8 +1,9 @@
 import React, { useRef, useEffect, useState, useCallback, useImperativeHandle } from 'react';
-import { AreaSector, FreehandStroke, InspectionElement, Point, CameraNorm, ProjectMeta } from '../types';
+import { AreaSector, FreehandStroke, InspectionElement, Point, CameraNorm, ProjectMeta, ProjectLayer } from '../types';
 import { ToolType } from './CanvasToolbar';
 import { adjustTramoMeters } from '../utils/tramoUtils';
 import { getElementPhotoRecords } from '../utils/photoUtils';
+import { normalizeLayer } from '../utils/layerUtils';
 import { Plus, Minus, Ruler } from 'lucide-react';
 
 export interface BlueprintCanvasRef {
@@ -20,6 +21,10 @@ interface BlueprintCanvasProps {
   zoomLevel: number;
   onZoomChange?: (zoom: number) => void;
   iconScale?: number;
+  // Multi-Layer Props
+  activeLayer?: ProjectLayer;
+  layerVisibility?: { civil: boolean; electrica: boolean };
+  // Visibility
   showCameraLabels: boolean;
   showLineLabels: boolean;
   showAreaLabels: boolean;
@@ -50,6 +55,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   zoomLevel,
   onZoomChange,
   iconScale = 1.6,
+  activeLayer = 'civil',
+  layerVisibility = { civil: true, electrica: true },
   showCameraLabels,
   showLineLabels,
   showAreaLabels,
@@ -135,6 +142,24 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     return isInside;
   };
 
+  // Helper distance calculation
+  const pointToSegmentDistance = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
+    const l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
+    if (l2 === 0) return Math.hypot(px - x1, py - y1);
+    let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+  };
+
+  // Filter elements based on layer visibility
+  const isElementVisible = useCallback((el: InspectionElement) => {
+    const l = normalizeLayer(el.layer);
+    if (layerVisibility) {
+      return layerVisibility[l] !== false;
+    }
+    return true;
+  }, [layerVisibility]);
+
   // Label badge renderer
   const drawLabelBadge = useCallback((
     ctx: CanvasRenderingContext2D, 
@@ -143,7 +168,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     labelText: string, 
     colorHex: string,
     subText?: string,
-    scale: number = 1.6
+    scale: number = 1.6,
+    isElectric: boolean = false
   ) => {
     ctx.save();
     const titleFontSize = Math.max(11, Math.round(11 * (scale * 0.8)));
@@ -166,12 +192,12 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     const cornerRadius = Math.max(5, Math.round(6 * (scale * 0.8)));
 
     // Subtle drop shadow
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+    ctx.shadowColor = isElectric ? 'rgba(6, 182, 212, 0.4)' : 'rgba(0, 0, 0, 0.45)';
     ctx.shadowBlur = Math.round(8 * (scale * 0.8));
     ctx.shadowOffsetY = Math.round(3 * (scale * 0.8));
 
     // Background rounded rectangle
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+    ctx.fillStyle = isElectric ? 'rgba(8, 20, 44, 0.96)' : 'rgba(15, 23, 42, 0.94)';
     ctx.beginPath();
     ctx.roundRect(x - bgWidth / 2, y - bgHeight / 2, bgWidth, bgHeight, cornerRadius);
     ctx.fill();
@@ -179,8 +205,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     // Reset shadow for sharp lines & text
     ctx.shadowColor = 'transparent';
 
-    // Border outline with status color
-    ctx.strokeStyle = colorHex || '#38bdf8';
+    // Border outline with status color or electric cyan
+    ctx.strokeStyle = isElectric ? '#06b6d4' : (colorHex || '#38bdf8');
     ctx.lineWidth = Math.max(1.5, 1.5 * (scale * 0.8));
     ctx.stroke();
 
@@ -190,7 +216,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
     ctx.beginPath();
     ctx.arc(dotX, dotY, dotSize / 2, 0, Math.PI * 2);
-    ctx.fillStyle = colorHex || '#38bdf8';
+    ctx.fillStyle = colorHex || (isElectric ? '#06b6d4' : '#38bdf8');
     ctx.fill();
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1;
@@ -206,7 +232,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       ctx.font = `bold ${titleFontSize}px Inter, system-ui, sans-serif`;
       ctx.fillText(labelText, textX, y - Math.round(6 * (scale * 0.8)));
 
-      ctx.fillStyle = '#fbbf24'; // Warm amber highlight for specs
+      ctx.fillStyle = isElectric ? '#67e8f9' : '#fbbf24'; // Cyan highlight for electric specs, Amber for civil
       ctx.font = `${subFontSize}px "JetBrains Mono", monospace, sans-serif`;
       ctx.fillText(subText, x - bgWidth / 2 + paddingX, y + Math.round(8 * (scale * 0.8)));
     } else {
@@ -218,7 +244,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     ctx.restore();
   }, []);
 
-  // Camera badge renderer with vector camera icon
+  // Civil Floor Inspection Chamber badge renderer
   const drawCameraBadge = useCallback((
     ctx: CanvasRenderingContext2D,
     x: number,
@@ -262,7 +288,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // DRAW VECTOR FLOOR INSPECTION CHAMBER (CÁMARA DE PISO) ICON
+    // DRAW VECTOR FLOOR INSPECTION CHAMBER (CÁMARA DE PISO CIVIL) ICON
     ctx.save();
     const boxSize = 14 * scale;
     const boxX = x - boxSize / 2;
@@ -291,12 +317,10 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     ctx.lineWidth = Math.max(0.8, 1 * scale);
     ctx.stroke();
 
-    // 3. Concrete Rebar Grid Pattern (Malla electro-soldada / 5 Ø 3/8 ambos sentidos)
+    // 3. Concrete Rebar Grid Pattern (Malla electro-soldada)
     ctx.beginPath();
-    // Horizontal grid line
     ctx.moveTo(lidX + 1.5 * scale, y);
     ctx.lineTo(lidX + lidSize - 1.5 * scale, y);
-    // Vertical grid line
     ctx.moveTo(x, lidY + 1.5 * scale);
     ctx.lineTo(x, lidY + lidSize - 1.5 * scale);
 
@@ -304,18 +328,14 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     ctx.lineWidth = Math.max(1, 1.2 * scale);
     ctx.stroke();
 
-    // 4. Corner Anchors & Perspective Chamfers (Anclajes de marco / Profundidad pozo)
+    // 4. Corner Anchors & Perspective Chamfers
     ctx.beginPath();
-    // Top-left
     ctx.moveTo(boxX + 0.5 * scale, boxY + 0.5 * scale);
     ctx.lineTo(lidX, lidY);
-    // Top-right
     ctx.moveTo(boxX + boxSize - 0.5 * scale, boxY + 0.5 * scale);
     ctx.lineTo(lidX + lidSize, lidY);
-    // Bottom-left
     ctx.moveTo(boxX + 0.5 * scale, boxY + boxSize - 0.5 * scale);
     ctx.lineTo(lidX, lidY + lidSize);
-    // Bottom-right
     ctx.moveTo(boxX + boxSize - 0.5 * scale, boxY + boxSize - 0.5 * scale);
     ctx.lineTo(lidX + lidSize, lidY + lidSize);
 
@@ -330,13 +350,13 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
     if (upperSub.includes('MT')) {
       normCode = 'MT';
-      normColor = '#d946ef'; // Magenta
+      normColor = '#d946ef';
     } else if (upperSub.includes('D') && !upperSub.includes('MOD') && !upperSub.includes('ADD')) {
       normCode = 'D';
-      normColor = '#3b82f6'; // Blue
+      normColor = '#3b82f6';
     } else if (upperSub.includes('BT')) {
       normCode = 'BT';
-      normColor = '#10b981'; // Green / Magenta
+      normColor = '#10b981';
     }
 
     if (normCode) {
@@ -356,7 +376,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
     ctx.restore();
 
-    // Small Glowing Status Dot at top right (45 degrees)
+    // Small Glowing Status Dot at top right
     const dotAngle = -Math.PI / 4;
     const statusX = x + Math.cos(dotAngle) * iconRadius;
     const statusY = y + Math.sin(dotAngle) * iconRadius;
@@ -383,13 +403,213 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       ctx.stroke();
       ctx.setLineDash([]);
 
-      drawLabelBadge(ctx, x, badgeY, labelText, colorHex, subText, scale);
+      drawLabelBadge(ctx, x, badgeY, labelText, colorHex, subText, scale, false);
     }
 
     ctx.restore();
   }, [drawLabelBadge]);
 
-  // Conduit line renderer with industrial pipe casing and terminal nodes
+  // Electrical Node badge renderer (Tableros TD, Transformadores TR, Cámaras Eléctricas CE, Luminarias LUM, etc.)
+  const drawElectricNodeBadge = useCallback((
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    labelText: string,
+    colorHex: string,
+    status: string,
+    nodeType: string = 'tablero',
+    size: number = 10,
+    showLabel: boolean,
+    subText?: string,
+    scale: number = 1.6
+  ) => {
+    ctx.save();
+
+    const iconRadius = Math.max((size + 5) * scale, 19 * scale);
+
+    // Cyan / Electric Amber outer glow
+    ctx.shadowColor = '#06b6d4';
+    ctx.shadowBlur = 12 * scale;
+
+    // Dark octagonal / circular electrical enclosure base
+    ctx.beginPath();
+    ctx.arc(x, y, iconRadius, 0, Math.PI * 2);
+    ctx.fillStyle = '#08142c'; // High-tech electric navy
+    ctx.fill();
+
+    ctx.shadowColor = 'transparent';
+
+    // Outer neon ring
+    ctx.strokeStyle = '#06b6d4';
+    ctx.lineWidth = Math.max(2.5, 3 * scale);
+    ctx.stroke();
+
+    // Secondary concentric circuit locator ring
+    ctx.beginPath();
+    ctx.arc(x, y, iconRadius + 5 * scale, 0, Math.PI * 2);
+    ctx.strokeStyle = colorHex;
+    ctx.lineWidth = Math.max(1.2, 1.5 * scale);
+    ctx.setLineDash([4 * scale, 3 * scale]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // DRAW SPECIALIZED ELECTRICAL VECTOR ICON INSIDE
+    ctx.save();
+    const boxSize = 15 * scale;
+    const boxX = x - boxSize / 2;
+    const boxY = y - boxSize / 2;
+
+    const upperLabel = labelText.toUpperCase();
+    const isTD = nodeType === 'tablero' || upperLabel.startsWith('TD');
+    const isTR = nodeType === 'transformador' || upperLabel.startsWith('TR');
+    const isLUM = nodeType === 'luminaria' || upperLabel.startsWith('LUM');
+    const isSPT = nodeType === 'spt' || upperLabel.startsWith('SPT');
+
+    if (isTD) {
+      // 1. DISTRIBUTION BOARD PANEL (Tablero Eléctrico / TD)
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxSize, boxSize, 2 * scale);
+      ctx.fillStyle = '#1e293b';
+      ctx.fill();
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = Math.max(1, 1.5 * scale);
+      ctx.stroke();
+
+      // Breakers rows
+      ctx.fillStyle = '#f59e0b';
+      const bW = 2 * scale;
+      const bH = 3.5 * scale;
+      ctx.fillRect(boxX + 2.5 * scale, boxY + 2.5 * scale, bW, bH);
+      ctx.fillRect(boxX + 5.5 * scale, boxY + 2.5 * scale, bW, bH);
+      ctx.fillRect(boxX + 2.5 * scale, boxY + 8 * scale, bW, bH);
+      ctx.fillRect(boxX + 5.5 * scale, boxY + 8 * scale, bW, bH);
+
+      // Central Lightning Bolt ⚡
+      ctx.beginPath();
+      ctx.moveTo(x + 2 * scale, boxY + 2 * scale);
+      ctx.lineTo(x - 1 * scale, y);
+      ctx.lineTo(x + 2 * scale, y);
+      ctx.lineTo(x - 2 * scale, boxY + boxSize - 2 * scale);
+      ctx.lineTo(x + 0.5 * scale, y + 1 * scale);
+      ctx.lineTo(x - 1.5 * scale, y + 1 * scale);
+      ctx.closePath();
+      ctx.fillStyle = '#38bdf8';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 0.8 * scale;
+      ctx.stroke();
+    } else if (isTR) {
+      // 2. TRANSFORMER CORE (Transformador / TR)
+      // Inductive coils (Two overlapping circles)
+      const rCoil = 4.5 * scale;
+      ctx.beginPath();
+      ctx.arc(x - 2.5 * scale, y, rCoil, 0, Math.PI * 2);
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 1.8 * scale;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(x + 2.5 * scale, y, rCoil, 0, Math.PI * 2);
+      ctx.strokeStyle = '#06b6d4';
+      ctx.lineWidth = 1.8 * scale;
+      ctx.stroke();
+
+      // Bushings terminal tags
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x - 4 * scale, y - rCoil - 2 * scale, 1.5 * scale, 2 * scale);
+      ctx.fillRect(x + 2.5 * scale, y - rCoil - 2 * scale, 1.5 * scale, 2 * scale);
+    } else if (isLUM) {
+      // 3. LUMINAIRE / LIGHTING FIXTURE (Luminaria / LUM)
+      ctx.beginPath();
+      ctx.arc(x, y - 1 * scale, 4.5 * scale, 0, Math.PI * 2);
+      ctx.fillStyle = '#fef08a';
+      ctx.fill();
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 1.5 * scale;
+      ctx.stroke();
+
+      // Light beam rays
+      ctx.strokeStyle = '#fef08a';
+      ctx.lineWidth = 1.2 * scale;
+      for (let i = 0; i < 6; i++) {
+        const ang = (i * Math.PI) / 3;
+        ctx.beginPath();
+        ctx.moveTo(x + Math.cos(ang) * 5.5 * scale, y - 1 * scale + Math.sin(ang) * 5.5 * scale);
+        ctx.lineTo(x + Math.cos(ang) * 7.5 * scale, y - 1 * scale + Math.sin(ang) * 7.5 * scale);
+        ctx.stroke();
+      }
+    } else if (isSPT) {
+      // 4. GROUNDING SYSTEM (Puesta a tierra / SPT ⏚)
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 2 * scale;
+      ctx.beginPath();
+      ctx.moveTo(x, boxY + 2 * scale);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+
+      // Ground horizontal bars
+      ctx.beginPath();
+      ctx.moveTo(x - 5 * scale, y);
+      ctx.lineTo(x + 5 * scale, y);
+      ctx.moveTo(x - 3.5 * scale, y + 2.5 * scale);
+      ctx.lineTo(x + 3.5 * scale, y + 2.5 * scale);
+      ctx.moveTo(x - 2 * scale, y + 5 * scale);
+      ctx.lineTo(x + 2 * scale, y + 5 * scale);
+      ctx.stroke();
+    } else {
+      // 5. ELECTRICAL JUNCTION / CHAMBER (Cámara Eléctrica CE / Caja CP)
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxSize, boxSize, 2 * scale);
+      ctx.fillStyle = '#0369a1';
+      ctx.fill();
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1.5 * scale;
+      ctx.stroke();
+
+      // Terminal blocks inside
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(boxX + 2 * scale, y - 1 * scale, boxSize - 4 * scale, 2 * scale);
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.arc(x, y, 2.5 * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    // Top Right Status indicator dot
+    const dotAngle = -Math.PI / 4;
+    const statusX = x + Math.cos(dotAngle) * iconRadius;
+    const statusY = y + Math.sin(dotAngle) * iconRadius;
+
+    ctx.beginPath();
+    ctx.arc(statusX, statusY, 4.5 * scale, 0, Math.PI * 2);
+    ctx.fillStyle = colorHex;
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = Math.max(1.5, 1.8 * scale);
+    ctx.stroke();
+
+    // Label Badge below
+    if (showLabel) {
+      const badgeY = y + iconRadius + 18 * scale;
+
+      ctx.beginPath();
+      ctx.moveTo(x, y + iconRadius + 2 * scale);
+      ctx.lineTo(x, badgeY - 10 * scale);
+      ctx.strokeStyle = '#06b6d4';
+      ctx.lineWidth = Math.max(1.5, 1.8 * scale);
+      ctx.setLineDash([2 * scale, 2 * scale]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      drawLabelBadge(ctx, x, badgeY, `⚡ ${labelText}`, colorHex, subText, scale, true);
+    }
+
+    ctx.restore();
+  }, [drawLabelBadge]);
+
+  // Line renderer: supports Civil Conduits and Electrical Circuits
   const drawLineElement = useCallback((
     ctx: CanvasRenderingContext2D,
     x1: number,
@@ -405,88 +625,175 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     pipes?: string,
     cables?: string,
     scale: number = 1.6,
-    acta?: string
+    acta?: string,
+    isElectric: boolean = false
   ) => {
     ctx.save();
 
-    // 1. Outer Conduit Pipe Casing (Dark slate background with glow)
-    ctx.shadowColor = colorHex;
-    ctx.shadowBlur = 6 * scale;
+    if (isElectric) {
+      // --- ELECTRICAL CIRCUIT / FEEDER LINE STYLING ---
+      // 1. Electric Glow Shadow
+      ctx.shadowColor = '#06b6d4';
+      ctx.shadowBlur = 8 * scale;
 
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = Math.max(8, 12 * scale);
-    ctx.lineCap = 'round';
-    ctx.stroke();
-
-    ctx.shadowColor = 'transparent';
-
-    // 2. Main Pipe Body
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.strokeStyle = colorHex;
-    ctx.lineWidth = Math.max(4, 6 * scale);
-    ctx.lineCap = 'round';
-    ctx.stroke();
-
-    // 3. Inner Duct Core Stripe (gives realistic industrial conduit feel)
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.lineWidth = Math.max(1, 2 * scale);
-    ctx.setLineDash([6 * scale, 5 * scale]);
-    ctx.lineCap = 'round';
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // 4. Terminal Connection Boxes / Nodes at endpoints
-    const drawTerminalNode = (nx: number, ny: number) => {
-      ctx.save();
-      ctx.shadowColor = colorHex;
-      ctx.shadowBlur = 4 * scale;
-
-      const nodeRadius = Math.max(6, 8.5 * scale);
+      // 2. High-Tech Cable Conduit Casing
       ctx.beginPath();
-      ctx.arc(nx, ny, nodeRadius, 0, Math.PI * 2);
-      ctx.fillStyle = '#0f172a';
-      ctx.fill();
-
-      ctx.shadowColor = 'transparent';
-      ctx.strokeStyle = colorHex;
-      ctx.lineWidth = Math.max(1.5, 2.2 * scale);
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = '#08142c';
+      ctx.lineWidth = Math.max(8, 11 * scale);
+      ctx.lineCap = 'round';
       ctx.stroke();
 
+      ctx.shadowColor = 'transparent';
+
+      // 3. Main Glowing Cable Conductor Body
       ctx.beginPath();
-      ctx.arc(nx, ny, nodeRadius * 0.35, 0, Math.PI * 2);
-      ctx.fillStyle = '#ffffff';
-      ctx.fill();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = colorHex === '#94a3b8' ? '#06b6d4' : colorHex;
+      ctx.lineWidth = Math.max(4, 5.5 * scale);
+      ctx.lineCap = 'round';
+      ctx.stroke();
 
-      ctx.restore();
-    };
+      // 4. Electric Pulse Dash Line
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = Math.max(1.2, 2 * scale);
+      ctx.setLineDash([4 * scale, 6 * scale]);
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      ctx.setLineDash([]);
 
-    drawTerminalNode(x1, y1);
-    drawTerminalNode(x2, y2);
+      // 5. Electric Terminal Node Blocks
+      const drawElectricTerminal = (nx: number, ny: number) => {
+        ctx.save();
+        ctx.shadowColor = '#06b6d4';
+        ctx.shadowBlur = 6 * scale;
 
-    // 5. Midpoint Label Badge
-    if (showLabel) {
-      const midX = (x1 + x2) / 2;
-      const midY = (y1 + y2) / 2;
-      const photoStr = photosCount > 0 ? ` 📷${photosCount}` : '';
+        const nodeRadius = Math.max(6, 8.5 * scale);
+        ctx.beginPath();
+        ctx.arc(nx, ny, nodeRadius, 0, Math.PI * 2);
+        ctx.fillStyle = '#08142c';
+        ctx.fill();
 
-      let subStr: string | undefined = undefined;
-      if (showSpecs) {
-        const parts = [];
-        if (acta) parts.push(`[${acta}]`);
-        if (pipes) parts.push(`Tub: ${pipes}`);
-        if (cables) parts.push(`Cab: ${cables}`);
-        if (parts.length > 0) subStr = parts.join(' | ');
+        ctx.shadowColor = 'transparent';
+        ctx.strokeStyle = '#06b6d4';
+        ctx.lineWidth = Math.max(1.5, 2.2 * scale);
+        ctx.stroke();
+
+        // ⚡ symbol dot
+        ctx.beginPath();
+        ctx.arc(nx, ny, nodeRadius * 0.4, 0, Math.PI * 2);
+        ctx.fillStyle = '#f59e0b';
+        ctx.fill();
+
+        ctx.restore();
+      };
+
+      drawElectricTerminal(x1, y1);
+      drawElectricTerminal(x2, y2);
+
+      // 6. Label Badge
+      if (showLabel) {
+        const midX = (x1 + x2) / 2;
+        const midY = (y1 + y2) / 2;
+        const photoStr = photosCount > 0 ? ` 📷${photosCount}` : '';
+
+        let subStr: string | undefined = undefined;
+        if (showSpecs) {
+          const parts = [];
+          if (acta) parts.push(`[${acta}]`);
+          if (cables) parts.push(`Conductor: ${cables}`);
+          if (pipes) parts.push(`Ducto: ${pipes}`);
+          if (parts.length > 0) subStr = parts.join(' | ');
+        }
+
+        drawLabelBadge(ctx, midX, midY, `⚡ ${label} (${meters || 0}m)${photoStr}`, colorHex, subStr, scale, true);
       }
+    } else {
+      // --- CIVIL CONDUIT / TRENCH DUCT BANK STYLING ---
+      // 1. Outer Conduit Pipe Casing (Dark slate background with glow)
+      ctx.shadowColor = colorHex;
+      ctx.shadowBlur = 6 * scale;
 
-      drawLabelBadge(ctx, midX, midY, `${label} (${meters || 0}m)${photoStr}`, colorHex, subStr, scale);
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = Math.max(8, 12 * scale);
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      ctx.shadowColor = 'transparent';
+
+      // 2. Main Pipe Body
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = colorHex;
+      ctx.lineWidth = Math.max(4, 6 * scale);
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // 3. Inner Duct Core Stripe
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.lineWidth = Math.max(1, 2 * scale);
+      ctx.setLineDash([6 * scale, 5 * scale]);
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 4. Terminal Connection Boxes
+      const drawTerminalNode = (nx: number, ny: number) => {
+        ctx.save();
+        ctx.shadowColor = colorHex;
+        ctx.shadowBlur = 4 * scale;
+
+        const nodeRadius = Math.max(6, 8.5 * scale);
+        ctx.beginPath();
+        ctx.arc(nx, ny, nodeRadius, 0, Math.PI * 2);
+        ctx.fillStyle = '#0f172a';
+        ctx.fill();
+
+        ctx.shadowColor = 'transparent';
+        ctx.strokeStyle = colorHex;
+        ctx.lineWidth = Math.max(1.5, 2.2 * scale);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(nx, ny, nodeRadius * 0.35, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+
+        ctx.restore();
+      };
+
+      drawTerminalNode(x1, y1);
+      drawTerminalNode(x2, y2);
+
+      // 5. Midpoint Label Badge
+      if (showLabel) {
+        const midX = (x1 + x2) / 2;
+        const midY = (y1 + y2) / 2;
+        const photoStr = photosCount > 0 ? ` 📷${photosCount}` : '';
+
+        let subStr: string | undefined = undefined;
+        if (showSpecs) {
+          const parts = [];
+          if (acta) parts.push(`[${acta}]`);
+          if (pipes) parts.push(`Tub: ${pipes}`);
+          if (cables) parts.push(`Cab: ${cables}`);
+          if (parts.length > 0) subStr = parts.join(' | ');
+        }
+
+        drawLabelBadge(ctx, midX, midY, `${label} (${meters || 0}m)${photoStr}`, colorHex, subStr, scale, false);
+      }
     }
 
     ctx.restore();
@@ -519,50 +826,55 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       }
     }
 
-    // 2. Sectors
+    // 2. Area sectors
     areas.forEach(area => {
       if (area.points.length < 3) return;
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(area.points[0].x, area.points[0].y);
-      for (let i = 1; i < area.points.length; i++) ctx.lineTo(area.points[i].x, area.points[i].y);
+      for (let i = 1; i < area.points.length; i++) {
+        ctx.lineTo(area.points[i].x, area.points[i].y);
+      }
       ctx.closePath();
-      ctx.fillStyle = area.color.fill;
+      ctx.fillStyle = area.color || 'rgba(168, 85, 247, 0.18)';
       ctx.fill();
-      ctx.strokeStyle = area.color.stroke;
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = area.borderColor || 'rgba(168, 85, 247, 0.85)';
+      ctx.lineWidth = 2.5;
       ctx.stroke();
 
-      let cx = 0, cy = 0;
-      area.points.forEach(p => { cx += p.x; cy += p.y; });
-      cx /= area.points.length;
-      cy /= area.points.length;
-      const dimStr = area.calculatedAreaM2 ? ` (${area.calculatedAreaM2} m²)` : '';
-      drawLabelBadge(ctx, cx, cy, `${area.name}${dimStr}`, area.color.stroke);
+      const cx = area.points.reduce((sum, p) => sum + p.x, 0) / area.points.length;
+      const cy = area.points.reduce((sum, p) => sum + p.y, 0) / area.points.length;
+      drawLabelBadge(ctx, cx, cy, area.name, area.borderColor || '#a855f7', undefined, iconScale, false);
       ctx.restore();
     });
 
     // 3. Freehand strokes
-    strokes.forEach(s => {
-      if (s.points.length < 2) return;
+    strokes.forEach(stroke => {
+      if (stroke.points.length < 2) return;
       ctx.save();
       ctx.beginPath();
-      ctx.moveTo(s.points[0].x, s.points[0].y);
-      for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
-      ctx.strokeStyle = s.color || 'rgba(250, 204, 21, 0.45)';
-      ctx.lineWidth = s.width || 12;
+      ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+      for (let i = 1; i < stroke.points.length; i++) {
+        ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+      }
+      ctx.strokeStyle = stroke.color;
+      ctx.lineWidth = stroke.width;
       ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
       ctx.stroke();
       ctx.restore();
     });
 
-    // 4. Inspection Elements
-    elements.forEach(el => {
+    // 4. Inspection Elements (respecting layer visibility)
+    const visibleElements = elements.filter(isElementVisible);
+
+    visibleElements.forEach(el => {
       let colorHex = '#94a3b8';
       if (el.status === 'En proceso') colorHex = '#f59e0b';
       if (el.status === 'Terminado') colorHex = '#10b981';
 
       const pCount = getElementPhotoRecords(el).length;
+      const isElectric = normalizeLayer(el.layer) === 'electrica';
 
       if (el.type === 'line' && el.x2 !== undefined && el.y2 !== undefined) {
         drawLineElement(
@@ -580,20 +892,26 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           el.pipes,
           el.cables,
           iconScale,
-          el.acta
+          el.acta,
+          isElectric
         );
       } else if (el.type === 'camera') {
         const photoStr = pCount > 0 ? ` 📷${pCount}` : '';
         const actaItemTag = [el.acta, el.itemCobro ? `Ítem ${el.itemCobro}` : ''].filter(Boolean).join(' | ');
-        const camSubStr = [actaItemTag ? `[${actaItemTag}]` : '', el.camType].filter(Boolean).join(' ');
+        const camSubStr = [actaItemTag ? `[${actaItemTag}]` : '', el.camType || el.circuitTag].filter(Boolean).join(' ');
         const statusLabel = el.status === 'En proceso' && el.progressPercent !== undefined ? `En proceso (${el.progressPercent}%)` : el.status;
-        drawCameraBadge(ctx, el.x, el.y, `${el.label}${photoStr}`, colorHex, statusLabel, el.size || 10, true, camSubStr, iconScale);
+
+        if (isElectric) {
+          drawElectricNodeBadge(ctx, el.x, el.y, `${el.label}${photoStr}`, colorHex, statusLabel, el.electricNodeType || 'tablero', el.size || 10, true, camSubStr, iconScale);
+        } else {
+          drawCameraBadge(ctx, el.x, el.y, `${el.label}${photoStr}`, colorHex, statusLabel, el.size || 10, true, camSubStr, iconScale);
+        }
       }
     });
 
     // 5. Official Legend Stamp Box at bottom right
-    const boxW = 350;
-    const boxH = 130;
+    const boxW = 360;
+    const boxH = 145;
     const boxX = exportCanvas.width - boxW - 20;
     const boxY = exportCanvas.height - boxH - 20;
 
@@ -612,23 +930,29 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
     ctx.fillStyle = '#e2e8f0';
     ctx.font = '10px Inter, sans-serif';
-    ctx.fillText(`CONTRATISTA: ${projectMeta?.contractorName || 'Control de Canalizaciones'}`, boxX + 14, boxY + 42);
+    ctx.fillText(`CONTRATISTA: ${projectMeta?.contractorName || 'Control de Obras Civiles y Eléctricas'}`, boxX + 14, boxY + 42);
     ctx.fillText(`UBICACIÓN: ${projectMeta?.sectorLocation || 'Sector Principal'}`, boxX + 14, boxY + 57);
 
-    const totalMeters = elements.filter(e => e.type === 'line').reduce((sum, e) => sum + (e.meters || 0), 0);
-    const totalCams = elements.filter(e => e.type === 'camera').length;
-    const completedM = elements.filter(e => e.type === 'line' && e.status === 'Terminado').reduce((sum, e) => sum + (e.meters || 0), 0);
+    const totalMeters = visibleElements.filter(e => e.type === 'line').reduce((sum, e) => sum + (e.meters || 0), 0);
+    const totalCams = visibleElements.filter(e => e.type === 'camera').length;
+    const completedM = visibleElements.filter(e => e.type === 'line' && e.status === 'Terminado').reduce((sum, e) => sum + (e.meters || 0), 0);
 
     ctx.fillStyle = '#38bdf8';
     ctx.font = 'bold 10px Inter, sans-serif';
-    ctx.fillText(`METRAJE TOTAL: ${totalMeters} m  |  CÁMARAS: ${totalCams}`, boxX + 14, boxY + 77);
+    ctx.fillText(`METRAJE TOTAL: ${totalMeters} m  |  CÁMARAS / NODOS: ${totalCams}`, boxX + 14, boxY + 77);
 
     ctx.fillStyle = '#10b981';
     ctx.fillText(`AVANCE EJECUTADO: ${completedM} m (${totalMeters > 0 ? Math.round((completedM / totalMeters) * 100) : 0}%)`, boxX + 14, boxY + 95);
 
+    ctx.fillStyle = '#06b6d4';
+    ctx.font = 'bold 9px monospace';
+    const civCount = visibleElements.filter(e => normalizeLayer(e.layer) === 'civil').length;
+    const elecCount = visibleElements.filter(e => normalizeLayer(e.layer) === 'electrica').length;
+    ctx.fillText(`CAPAS ACTIVAS: 🏗️ Civiles (${civCount}) | ⚡ Eléctricas (${elecCount})`, boxX + 14, boxY + 113);
+
     ctx.fillStyle = '#94a3b8';
     ctx.font = '9px monospace';
-    ctx.fillText(`FECHA: ${new Date().toLocaleDateString('es-ES')} ${new Date().toLocaleTimeString('es-ES')}`, boxX + 14, boxY + 115);
+    ctx.fillText(`FECHA: ${new Date().toLocaleDateString('es-ES')} ${new Date().toLocaleTimeString('es-ES')}`, boxX + 14, boxY + 131);
     ctx.restore();
 
     // Trigger download
@@ -636,7 +960,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     link.download = `Plano_Obra_${(projectMeta?.sectorLocation || 'Anotado').replace(/\s+/g, '_')}_Metrajes.png`;
     link.href = exportCanvas.toDataURL('image/png');
     link.click();
-  }, [blueprintImg, areas, strokes, elements, drawLabelBadge, drawCameraBadge]);
+  }, [blueprintImg, areas, strokes, elements, isElementVisible, drawLabelBadge, drawCameraBadge, drawElectricNodeBadge, drawLineElement, iconScale]);
 
   // View resetting callback
   const resetView = useCallback(() => {
@@ -654,7 +978,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     resetView
   }), [exportAnnotatedBlueprintPNG, resetView]);
 
-  // Main Canvas Render Loop
+  // Redraw canvas
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -664,33 +988,36 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // 1. Background Grid Pattern
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
     ctx.translate(panX, panY);
     ctx.scale(zoomLevel, zoomLevel);
 
-    // 1. Background blueprint image
-    if (blueprintImg && blueprintImg.complete && blueprintImg.width > 0) {
-      ctx.drawImage(blueprintImg, 0, 0);
-    } else {
-      // Default dark grid background if no custom blueprint image loaded yet
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Subtle background grid
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 0.5 / zoomLevel;
+    const gridSize = 40;
+    const startX = Math.floor(-panX / (gridSize * zoomLevel)) * gridSize;
+    const endX = startX + Math.ceil(canvas.width / (gridSize * zoomLevel)) * gridSize + gridSize;
+    const startY = Math.floor(-panY / (gridSize * zoomLevel)) * gridSize;
+    const endY = startY + Math.ceil(canvas.height / (gridSize * zoomLevel)) * gridSize + gridSize;
 
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 1;
-      for (let x = 0; x < canvas.width; x += 40) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-      }
-      for (let y = 0; y < canvas.height; y += 40) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-      }
-
-      ctx.fillStyle = '#64748b';
-      ctx.font = 'bold 16px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('PLANO INTERACTIVO DE SEGUIMIENTO Y CONTROL', canvas.width / 2, canvas.height / 2);
+    for (let gx = startX; gx <= endX; gx += gridSize) {
+      ctx.beginPath(); ctx.moveTo(gx, startY); ctx.lineTo(gx, endY); ctx.stroke();
+    }
+    for (let gy = startY; gy <= endY; gy += gridSize) {
+      ctx.beginPath(); ctx.moveTo(startX, gy); ctx.lineTo(endX, gy); ctx.stroke();
     }
 
-    // 2. Saved Sector Polygons
+    // 2. Blueprint image
+    if (blueprintImg && blueprintImg.complete && blueprintImg.width > 0) {
+      ctx.drawImage(blueprintImg, 0, 0);
+    }
+
+    // 3. Area sectors
     areas.forEach(area => {
       if (area.points.length < 3) return;
       ctx.save();
@@ -700,28 +1027,22 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         ctx.lineTo(area.points[i].x, area.points[i].y);
       }
       ctx.closePath();
-      ctx.fillStyle = area.color.fill;
+      ctx.fillStyle = area.color || 'rgba(168, 85, 247, 0.18)';
       ctx.fill();
-      ctx.strokeStyle = area.color.stroke;
-      ctx.lineWidth = 2;
-      ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = area.borderColor || 'rgba(168, 85, 247, 0.85)';
+      ctx.lineWidth = 2.5;
       ctx.stroke();
-      ctx.setLineDash([]);
 
+      // Area label
       if (showAreaLabels) {
-        let cx = 0, cy = 0;
-        area.points.forEach(p => { cx += p.x; cy += p.y; });
-        cx /= area.points.length;
-        cy /= area.points.length;
-
-        const dimStr = area.calculatedAreaM2 ? ` (${area.calculatedAreaM2} m²)` : (area.widthMeters && area.lengthMeters ? ` (${area.widthMeters}x${area.lengthMeters}m)` : '');
-        const labelStr = area.code ? `[${area.code}] ${area.name}${dimStr}` : `${area.name}${dimStr}`;
-        drawLabelBadge(ctx, cx, cy, labelStr, area.color.stroke);
+        const cx = area.points.reduce((sum, p) => sum + p.x, 0) / area.points.length;
+        const cy = area.points.reduce((sum, p) => sum + p.y, 0) / area.points.length;
+        drawLabelBadge(ctx, cx, cy, area.name, area.borderColor || '#a855f7', undefined, iconScale, false);
       }
       ctx.restore();
     });
 
-    // 3. Active Area polygon in progress
+    // 4. Area currently being drawn
     if (currentAreaPoints.length > 0) {
       ctx.save();
       ctx.beginPath();
@@ -729,45 +1050,28 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       for (let i = 1; i < currentAreaPoints.length; i++) {
         ctx.lineTo(currentAreaPoints[i].x, currentAreaPoints[i].y);
       }
-
-      if (areaMousePos && currentTool === 'area') {
-        if (currentAreaPoints.length >= 3) {
-          const startPt = currentAreaPoints[0];
-          const dist = Math.hypot(areaMousePos.x - startPt.x, areaMousePos.y - startPt.y);
-          if (dist <= SNAP_RADIUS) {
-            ctx.lineTo(startPt.x, startPt.y);
-          } else {
-            ctx.lineTo(areaMousePos.x, areaMousePos.y);
-          }
-        } else {
-          ctx.lineTo(areaMousePos.x, areaMousePos.y);
-        }
+      if (areaMousePos) {
+        ctx.lineTo(areaMousePos.x, areaMousePos.y);
       }
-
-      if (currentAreaPoints.length >= 2) {
-        ctx.fillStyle = 'rgba(168, 85, 247, 0.12)';
-        ctx.fill();
-      }
-
-      ctx.strokeStyle = '#9333ea';
+      ctx.strokeStyle = '#a855f7';
       ctx.lineWidth = 2;
-      ctx.setLineDash([4, 4]);
+      ctx.setLineDash([6, 4]);
       ctx.stroke();
+      ctx.setLineDash([]);
 
-      currentAreaPoints.forEach((p, index) => {
+      currentAreaPoints.forEach((pt, idx) => {
         ctx.beginPath();
-        ctx.arc(p.x, p.y, index === 0 ? 7 : 5, 0, Math.PI * 2);
-        ctx.fillStyle = index === 0 ? '#10b981' : '#a855f7';
+        ctx.arc(pt.x, pt.y, idx === 0 ? 8 : 5, 0, Math.PI * 2);
+        ctx.fillStyle = idx === 0 ? '#ec4899' : '#a855f7';
         ctx.fill();
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.5;
         ctx.stroke();
       });
-
       ctx.restore();
     }
 
-    // 4. Freehand strokes
+    // 5. Freehand strokes
     strokes.forEach(stroke => {
       if (stroke.points.length < 2) return;
       ctx.save();
@@ -784,7 +1088,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       ctx.restore();
     });
 
-    // 5. Active Freehand Preview
+    // Freehand stroke currently being drawn
     if (isDrawing && currentTool === 'highlight' && currentPathRef.current.length > 1) {
       ctx.save();
       ctx.beginPath();
@@ -800,8 +1104,10 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       ctx.restore();
     }
 
-    // 6. Inspection Elements (Conduit lines & Cameras)
-    elements.forEach(baseEl => {
+    // 6. Inspection Elements (Conduit lines, Cameras & Electrical Nodes, respecting layer visibility)
+    const visibleElements = elements.filter(isElementVisible);
+
+    visibleElements.forEach(baseEl => {
       // Apply real-time drag offsets if this element is currently being dragged
       let el = baseEl;
       if (draggedElementRef.current && draggedElementRef.current.id === baseEl.id) {
@@ -834,6 +1140,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       if (el.status === 'Terminado') colorHex = '#10b981';
 
       const pCount = getElementPhotoRecords(el).length;
+      const isElectric = normalizeLayer(el.layer) === 'electrica';
 
       if (el.type === 'line' && el.x2 !== undefined && el.y2 !== undefined) {
         drawLineElement(
@@ -851,25 +1158,32 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           el.pipes,
           el.cables,
           iconScale,
-          el.acta
+          el.acta,
+          isElectric
         );
       } else if (el.type === 'camera') {
         const photoStr = pCount > 0 ? ` 📷${pCount}` : '';
         const actaItemTag = [el.acta, el.itemCobro ? `Ítem ${el.itemCobro}` : ''].filter(Boolean).join(' | ');
-        const camSubStr = showSpecsLabels ? [actaItemTag ? `[${actaItemTag}]` : '', el.camType].filter(Boolean).join(' ') : undefined;
+        const camSubStr = showSpecsLabels ? [actaItemTag ? `[${actaItemTag}]` : '', el.camType || el.circuitTag].filter(Boolean).join(' ') : undefined;
         const statusLabel = el.status === 'En proceso' && el.progressPercent !== undefined ? `En proceso (${el.progressPercent}%)` : el.status;
-        drawCameraBadge(ctx, el.x, el.y, `${el.label}${photoStr}`, colorHex, statusLabel, el.size || 10, showCameraLabels, camSubStr, iconScale);
+
+        if (isElectric) {
+          drawElectricNodeBadge(ctx, el.x, el.y, `${el.label}${photoStr}`, colorHex, statusLabel, el.electricNodeType || 'tablero', el.size || 10, showCameraLabels, camSubStr, iconScale);
+        } else {
+          drawCameraBadge(ctx, el.x, el.y, `${el.label}${photoStr}`, colorHex, statusLabel, el.size || 10, showCameraLabels, camSubStr, iconScale);
+        }
       }
     });
 
     // 7. Straight Line Preview
     const straightPreview = straightLinePreviewRef.current;
     if (isDrawing && currentTool === 'straight' && straightPreview) {
+      const isElectric = activeLayer === 'electrica';
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(straightPreview.x1, straightPreview.y1);
       ctx.lineTo(straightPreview.x2, straightPreview.y2);
-      ctx.strokeStyle = '#38bdf8';
+      ctx.strokeStyle = isElectric ? '#06b6d4' : '#38bdf8';
       ctx.lineWidth = 4;
       ctx.setLineDash([6, 4]);
       ctx.stroke();
@@ -879,12 +1193,11 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
     // 8. Interactive Drag Handles / Active Selection Highlight in Pan Mode
     if (currentTool === 'pan') {
-      elements.forEach(baseEl => {
+      visibleElements.forEach(baseEl => {
         const isHovered = hoveredElementInfo?.id === baseEl.id;
         const isDragged = draggedElementRef.current?.id === baseEl.id;
 
         if (isHovered || isDragged) {
-          // Apply real-time drag offsets if this element is currently being dragged
           let el = baseEl;
           if (isDragged && draggedElementRef.current) {
             const drag = draggedElementRef.current;
@@ -967,29 +1280,26 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     strokes,
     isDrawing,
     elements,
+    isElementVisible,
+    activeLayer,
     showLineLabels,
     showCameraLabels,
     showSpecsLabels,
     drawCameraBadge,
+    drawElectricNodeBadge,
     drawLineElement,
+    drawLabelBadge,
     iconScale,
     hoveredElementInfo,
     isDraggingElement
   ]);
 
-  // Helper distance calculation
-  const pointToSegmentDistance = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
-    const l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
-    if (l2 === 0) return Math.hypot(px - x1, py - y1);
-    let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
-    t = Math.max(0, Math.min(1, t));
-    return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
-  };
-
-  // Find camera or line hit part at canvas coordinate
+  // Find camera or line hit part at canvas coordinate (respecting visible elements only)
   const findHitPart = useCallback((x: number, y: number): { element: InspectionElement; part: 'camera' | 'line-start' | 'line-end' | 'line-body' } | null => {
-    // Check cameras first (caja de inspección)
-    for (const el of elements) {
+    const visibleElements = elements.filter(isElementVisible);
+
+    // Check cameras & nodes first
+    for (const el of visibleElements) {
       if (el.type === 'camera') {
         const radius = Math.max((el.size || 10) + 8, 20) * iconScale;
         if (Math.hypot(el.x - x, el.y - y) <= radius) {
@@ -997,8 +1307,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         }
       }
     }
-    // Check lines (tramo / canalización)
-    for (const el of elements) {
+    // Check lines (tramo / canalización / circuito)
+    for (const el of visibleElements) {
       if (el.type === 'line' && el.x2 !== undefined && el.y2 !== undefined) {
         const handleRadius = Math.max(14, 16 * iconScale);
         if (Math.hypot(el.x - x, el.y - y) <= handleRadius) {
@@ -1015,7 +1325,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       }
     }
     return null;
-  }, [elements, iconScale]);
+  }, [elements, iconScale, isElementVisible]);
 
   useEffect(() => {
     redraw();
@@ -1039,7 +1349,6 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   }, [blueprintImg]);
 
   // Mouse / Touch Event Handlers
-  
   const activePointers = useRef(new Map<number, {x: number, y: number}>());
   const initialPinchDist = useRef<number | null>(null);
   const initialZoomLevel = useRef(zoomLevel);
@@ -1048,13 +1357,9 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (e.target) e.target.setPointerCapture(e.pointerId);
 
-    if (activePointers.current.size === 2) {
-      setIsPanning(false); // Stop panning
-      setIsDrawing(false); // Stop drawing
-      
-      const pts = Array.from(activePointers.current.values()) as any[];
-      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-      initialPinchDist.current = dist;
+    if (activePointers.current.size === 2 && onZoomChange) {
+      const pts = Array.from(activePointers.current.values()) as { x: number; y: number }[];
+      initialPinchDist.current = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
       initialZoomLevel.current = zoomLevel;
       return;
     }
@@ -1069,20 +1374,16 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     }
 
-    if (activePointers.current.size === 2) {
-      const pts = Array.from(activePointers.current.values()) as any[];
-      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-      
-      if (initialPinchDist.current && onZoomChange) {
-        const zoomDelta = dist / initialPinchDist.current;
-        let newZoom = initialZoomLevel.current * zoomDelta;
-        newZoom = Math.min(Math.max(newZoom, 0.3), 4.0);
-        onZoomChange(newZoom);
-      }
+    if (activePointers.current.size === 2 && initialPinchDist.current && onZoomChange) {
+      const pts = Array.from(activePointers.current.values()) as { x: number; y: number }[];
+      const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const zoomFactor = currentDist / initialPinchDist.current;
+      const newZoom = Math.min(Math.max(initialZoomLevel.current * zoomFactor, 0.2), 5.0);
+      onZoomChange(newZoom);
       return;
     }
 
-    if (activePointers.current.size === 1 || activePointers.current.size === 0) {
+    if (activePointers.current.size <= 1) {
       handleMouseMove(e.clientX, e.clientY);
     }
   };
@@ -1090,13 +1391,17 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     activePointers.current.delete(e.pointerId);
     if (e.target && e.target.hasPointerCapture(e.pointerId)) {
-      e.target.releasePointerCapture(e.pointerId);
+      try {
+        e.target.releasePointerCapture(e.pointerId);
+      } catch (err) {
+        // Safe catch
+      }
     }
-    
+
     if (activePointers.current.size < 2) {
       initialPinchDist.current = null;
     }
-    
+
     if (activePointers.current.size === 0) {
       handleMouseUp();
     }
@@ -1138,15 +1443,22 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       redraw();
     } else if (currentTool === 'camera' && !isLocked) {
       const camLabel = `${camPrefix}${String(camCounter).padStart(2, '0')}`;
+      const isElectric = activeLayer === 'electrica';
+      
       const newEl: InspectionElement = {
         id: Date.now() + Math.floor(Math.random() * 100000),
         type: 'camera',
         label: camLabel,
+        layer: isElectric ? 'electrica' : 'civil',
         status: 'Pendiente',
         x: pos.x,
         y: pos.y,
         size: 9,
-        camType: camDefaultType,
+        camType: isElectric ? undefined : camDefaultType,
+        electricNodeType: isElectric 
+          ? (camPrefix.startsWith('TD') ? 'tablero' : (camPrefix.startsWith('TR') ? 'transformador' : (camPrefix.startsWith('LUM') ? 'luminaria' : (camPrefix.startsWith('SPT') ? 'spt' : 'camara_electrica'))))
+          : undefined,
+        circuitTag: isElectric ? `ACOMETIDA-${camLabel}` : undefined,
         voltage: 220,
         signalStrength: 90,
         date: new Date().toISOString().split('T')[0]
@@ -1289,21 +1601,26 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         const dx = preview.x2 - straightLineStartRef.current.x;
         const dy = preview.y2 - straightLineStartRef.current.y;
         if (Math.hypot(dx, dy) > 10) {
-          const lineCount = elements.filter(e => e.type === 'line').length + 1;
-          const label = `Tramo T-${String(lineCount).padStart(2, '0')}`;
+          const isElectric = activeLayer === 'electrica';
+          const lineCount = elements.filter(e => e.type === 'line' && normalizeLayer(e.layer) === (isElectric ? 'electrica' : 'civil')).length + 1;
+          const label = isElectric 
+            ? `Circuito E-${String(lineCount).padStart(2, '0')}` 
+            : `Tramo T-${String(lineCount).padStart(2, '0')}`;
           const approxMeters = Math.max(1, Math.round(Math.hypot(dx, dy) / 15));
+          
           const newEl: InspectionElement = {
             id: Date.now() + Math.floor(Math.random() * 100000),
             type: 'line',
             label: label,
+            layer: isElectric ? 'electrica' : 'civil',
             status: 'Pendiente',
             x: straightLineStartRef.current.x,
             y: straightLineStartRef.current.y,
             x2: preview.x2,
             y2: preview.y2,
             meters: approxMeters,
-            pipes: '6x6" PVC Schedule 40',
-            cables: '3#250 F+1#500N+1#6T',
+            pipes: isElectric ? '2" Conduit EMT / PVC' : '6x6" PVC Schedule 40',
+            cables: isElectric ? '3#4/0 AWG Cu + 1#4/0(N) + 1#4(T)' : '3#250 F+1#500N+1#6T',
             date: new Date().toISOString().split('T')[0]
           };
           onAddElement(newEl);
@@ -1320,130 +1637,52 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   const getCursorClass = () => {
     if (currentTool === 'pan') {
       if (isDraggingElement) return 'cursor-grabbing';
-      if (hoveredElementInfo) return 'cursor-move';
-      if (isPanning) return 'cursor-grabbing';
-      return 'cursor-grab';
+      if (hoveredElementInfo) return 'cursor-grab';
+      return isPanning ? 'cursor-grabbing' : 'cursor-grab';
     }
-    return 'cursor-crosshair';
+    if (currentTool === 'highlight' || currentTool === 'straight') return 'cursor-crosshair';
+    if (currentTool === 'camera') return 'cursor-cell';
+    if (currentTool === 'area') return 'cursor-crosshair';
+    if (currentTool === 'eraser') return 'cursor-not-allowed';
+    return 'cursor-default';
   };
 
-  const hoveredElement = hoveredElementInfo ? elements.find(e => e.id === hoveredElementInfo.id) : null;
-  const draggedElement = draggedElementRef.current ? elements.find(e => e.id === draggedElementRef.current?.id) : null;
-  const activeLine = (hoveredElement?.type === 'line' ? hoveredElement : (draggedElement?.type === 'line' ? draggedElement : null));
-
   return (
-    <div
+    <div 
       ref={containerRef}
-      className="relative w-full h-[400px] sm:h-[620px] min-h-[350px] bg-slate-900 rounded-xl overflow-hidden shadow-inner border border-slate-700 flex items-center justify-center select-none"
+      className={`relative w-full h-[650px] bg-slate-950 rounded-xl overflow-hidden shadow-inner border border-slate-800 ${getCursorClass()}`}
     >
-      {/* Floating Tramo Adjuster Tool bar over Canvas */}
-      {activeLine && onUpdateElement && currentTool === 'pan' && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-950/95 text-white border border-sky-400/80 shadow-2xl rounded-full px-3.5 py-1.5 flex items-center gap-2 z-30 backdrop-blur text-xs animate-in fade-in duration-150">
-          <span className="font-extrabold text-sky-300 flex items-center gap-1">
-            <Ruler className="w-3.5 h-3.5 text-sky-400" />
-            <span>{activeLine.label}:</span>
-            <span className="text-amber-300 font-mono text-sm">{activeLine.meters || 0}m</span>
-          </span>
-          <div className="h-4 w-px bg-slate-700" />
-          <span className="text-[10px] text-slate-300 font-semibold">Tramo:</span>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onUpdateElement(adjustTramoMeters(activeLine, -5, true));
-            }}
-            className="px-2 py-0.5 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-700 rounded-full font-bold text-[11px] transition flex items-center gap-0.5 shadow-sm"
-            title="Reducir 5 metros el tramo"
-          >
-            <Minus className="w-3 h-3" /> 5m
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onUpdateElement(adjustTramoMeters(activeLine, -1, true));
-            }}
-            className="px-2 py-0.5 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-700 rounded-full font-bold text-[11px] transition flex items-center gap-0.5 shadow-sm"
-            title="Reducir 1 metro el tramo"
-          >
-            <Minus className="w-3 h-3" /> 1m
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onUpdateElement(adjustTramoMeters(activeLine, 1, true));
-            }}
-            className="px-2 py-0.5 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700 rounded-full font-bold text-[11px] transition flex items-center gap-0.5 shadow-sm"
-            title="Aumentar 1 metro el tramo"
-          >
-            <Plus className="w-3 h-3" /> 1m
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onUpdateElement(adjustTramoMeters(activeLine, 5, true));
-            }}
-            className="px-2 py-0.5 bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700 rounded-full font-bold text-[11px] transition flex items-center gap-0.5 shadow-sm"
-            title="Aumentar 5 metros el tramo"
-          >
-            <Plus className="w-3 h-3" /> 5m
-          </button>
-        </div>
-      )}
-
-      {/* Floating Mobile Canvas Zoom Controls */}
-      <div className="absolute bottom-3 right-3 flex flex-col gap-1.5 z-30 no-print">
-        <button
-          type="button"
-          onClick={() => onZoomChange && onZoomChange(Math.min(4.0, zoomLevel * 1.25))}
-          className="w-10 h-10 bg-slate-950/90 text-white hover:bg-slate-800 border border-slate-700 rounded-xl shadow-lg flex items-center justify-center transition active:scale-95"
-          title="Acercar mapa"
-        >
-          <Plus className="w-5 h-5 text-amber-400" />
-        </button>
-        <button
-          type="button"
-          onClick={() => onZoomChange && onZoomChange(Math.max(0.3, zoomLevel * 0.8))}
-          className="w-10 h-10 bg-slate-950/90 text-white hover:bg-slate-800 border border-slate-700 rounded-xl shadow-lg flex items-center justify-center transition active:scale-95"
-          title="Alejar mapa"
-        >
-          <Minus className="w-5 h-5 text-amber-400" />
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setPanX(0);
-            setPanY(0);
-            if (onZoomChange) onZoomChange(1.0);
-          }}
-          className="w-10 h-10 bg-slate-950/90 text-white hover:bg-slate-800 border border-slate-700 rounded-xl shadow-lg flex items-center justify-center text-xs font-bold text-sky-400 transition active:scale-95"
-          title="Centrar mapa"
-        >
-          100%
-        </button>
-      </div>
-
       <canvas
         ref={canvasRef}
-        style={{ touchAction: 'none' }}
-        className={`block max-w-full max-h-full object-contain ${getCursorClass()}`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp} onPointerCancel={handlePointerCancel}
-        onMouseLeave={() => {
-          setAreaMousePos(null);
-          handleMouseUp();
-        }}
-        onTouchStart={(e) => {
-          if (e.touches.length === 1) handleMouseDown(e.touches[0].clientX, e.touches[0].clientY);
-        }}
-        onTouchMove={(e) => {
-          if (e.touches.length === 1) handleMouseMove(e.touches[0].clientX, e.touches[0].clientY);
-        }}
-        onTouchEnd={handleMouseUp}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        className="w-full h-full block touch-none"
       />
+
+      {/* Floating Active Layer & Mode Pill */}
+      <div className="absolute top-3 left-3 bg-slate-900/90 backdrop-blur border border-slate-700/80 px-3 py-1.5 rounded-lg text-white text-xs font-bold flex items-center gap-2 shadow-lg pointer-events-none no-print">
+        {activeLayer === 'electrica' ? (
+          <>
+            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
+            <span className="text-cyan-300 font-extrabold flex items-center gap-1">
+              ⚡ Capa Eléctrica Activa
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+            <span className="text-amber-300 font-extrabold flex items-center gap-1">
+              🏗️ Capa Obras Civiles Activa
+            </span>
+          </>
+        )}
+        <span className="text-slate-500">|</span>
+        <span className="text-slate-300 text-[11px]">
+          {currentTool === 'pan' ? 'Inspeccionar / Arrastrar' : (currentTool === 'straight' ? 'Trazar Línea' : (currentTool === 'camera' ? 'Colocar Nodo' : currentTool))}
+        </span>
+      </div>
     </div>
   );
 };

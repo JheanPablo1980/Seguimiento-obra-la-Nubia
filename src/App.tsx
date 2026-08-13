@@ -10,7 +10,8 @@ import {
   CameraNorm,
   AuthUser,
   GlobalConfig,
-  ScheduleItem
+  ScheduleItem,
+  ProjectLayer
 } from './types';
 import { 
   INITIAL_PROJECT_META, 
@@ -395,6 +396,37 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem('obra_icon_scale_v1', iconScale.toString()); } catch (e) {}
   }, [iconScale]);
+
+  // Multi-Layer State (Obras Civiles vs Obras Eléctricas)
+  const [activeLayer, setActiveLayer] = useState<ProjectLayer>(() => {
+    try {
+      const saved = localStorage.getItem('obra_active_layer_v1');
+      return (saved === 'electrica' || saved === 'civil') ? saved : 'civil';
+    } catch (e) {
+      return 'civil';
+    }
+  });
+
+  const [layerVisibility, setLayerVisibility] = useState<{ civil: boolean; electrica: boolean }>(() => {
+    try {
+      const saved = localStorage.getItem('obra_layer_visibility_v1');
+      return saved ? JSON.parse(saved) : { civil: true, electrica: true };
+    } catch (e) {
+      return { civil: true, electrica: true };
+    }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('obra_active_layer_v1', activeLayer); } catch (e) {}
+  }, [activeLayer]);
+
+  useEffect(() => {
+    try { localStorage.setItem('obra_layer_visibility_v1', JSON.stringify(layerVisibility)); } catch (e) {}
+  }, [layerVisibility]);
+
+  const handleToggleLayerVisibility = (layer: ProjectLayer) => {
+    setLayerVisibility(prev => ({ ...prev, [layer]: !prev[layer] }));
+  };
 
   // Area demarcation & Delete modal state
   const [currentAreaPoints, setCurrentAreaPoints] = useState<Point[]>([]);
@@ -1362,6 +1394,10 @@ export default function App() {
                 <CanvasToolbar
                   currentTool={currentTool}
                   onSelectTool={setCurrentTool}
+                  activeLayer={activeLayer}
+                  onChangeActiveLayer={setActiveLayer}
+                  layerVisibility={layerVisibility}
+                  onToggleLayerVisibility={handleToggleLayerVisibility}
                   areaPointCount={currentAreaPoints.length}
                   onUndoAreaPoint={() => {
                     setCurrentAreaPoints(pts => pts.slice(0, -1));
@@ -1417,6 +1453,8 @@ export default function App() {
                   zoomLevel={zoomLevel}
                   onZoomChange={setZoomLevel}
                   iconScale={iconScale}
+                  activeLayer={activeLayer}
+                  layerVisibility={layerVisibility}
                   showCameraLabels={showCameraLabels}
                   showLineLabels={showLineLabels}
                   showAreaLabels={showAreaLabels}
@@ -1471,10 +1509,12 @@ export default function App() {
               onLocateElement={handleLocateElement}
               onAddTramo={() => {
                 const lineCount = elements.filter(e => e.type === 'line').length + 1;
-                const label = `Tramo T-${String(lineCount).padStart(2, '0')}`;
+                const isElect = activeLayer === 'electrica';
+                const label = isElect ? `Circuito C-${String(lineCount).padStart(2, '0')}` : `Tramo T-${String(lineCount).padStart(2, '0')}`;
                 const newEl: InspectionElement = {
                   id: Date.now() + Math.floor(Math.random() * 100000),
                   type: 'line',
+                  layer: activeLayer,
                   label,
                   status: 'Pendiente',
                   x: 200,
@@ -1482,22 +1522,27 @@ export default function App() {
                   x2: 350,
                   y2: 200,
                   meters: 25,
-                  pipes: '6x6" PVC Schedule 40',
-                  cables: '3#250 F+1#500N+1#6T',
+                  pipes: isElect ? 'Ducto EMT Ø 1 1/2"' : '6x6" PVC Schedule 40',
+                  cables: isElect ? '3#8 AWG THHN + 1#10T' : '3#250 F+1#500N+1#6T',
+                  circuitTag: isElect ? 'CIR-FUERZA-01' : undefined,
                   date: new Date().toISOString().split('T')[0]
                 };
                 handleAddElement(newEl);
               }}
               onAddCamera={() => {
-                const camLabel = `${camPrefix}${String(camCounter).padStart(2, '0')}`;
+                const isElect = activeLayer === 'electrica';
+                const camLabel = isElect ? `TD-${String(camCounter).padStart(2, '0')}` : `${camPrefix}${String(camCounter).padStart(2, '0')}`;
                 const newEl: InspectionElement = {
                   id: Date.now() + Math.floor(Math.random() * 100000),
                   type: 'camera',
+                  layer: activeLayer,
                   label: camLabel,
                   status: 'Pendiente',
                   x: 300,
                   y: 300,
                   camType: camDefaultType,
+                  electricNodeType: isElect ? 'tablero' : undefined,
+                  circuitTag: isElect ? 'ALIM-220V' : undefined,
                   voltage: 220,
                   signalStrength: 95,
                   date: new Date().toISOString().split('T')[0]

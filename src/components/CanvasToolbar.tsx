@@ -1,5 +1,5 @@
 import React from 'react';
-import { CameraNorm } from '../types';
+import { CameraNorm, ProjectLayer } from '../types';
 import { 
   Hand, 
   Highlighter, 
@@ -18,20 +18,29 @@ import {
   X,
   Layers,
   FileSpreadsheet,
-  Sparkles
+  Sparkles,
+  Zap,
+  HardHat,
+  Boxes
 } from 'lucide-react';
+import { ELECTRICAL_NODE_TYPES } from '../utils/layerUtils';
 
 export type ToolType = 'pan' | 'highlight' | 'straight' | 'camera' | 'area' | 'eraser';
 
 interface CanvasToolbarProps {
   currentTool: ToolType;
   onSelectTool: (tool: ToolType) => void;
+  // Layer Management
+  activeLayer?: ProjectLayer;
+  onChangeActiveLayer?: (layer: ProjectLayer) => void;
+  layerVisibility?: { civil: boolean; electrica: boolean };
+  onToggleLayerVisibility?: (layer: ProjectLayer) => void;
   // Area drawing controls
   areaPointCount: number;
   onUndoAreaPoint: () => void;
   onFinishArea: () => void;
   onCancelArea: () => void;
-  // Camera config
+  // Camera & Node config
   camPrefix: string;
   onCamPrefixChange: (val: string) => void;
   camCounter: number;
@@ -63,6 +72,10 @@ interface CanvasToolbarProps {
 export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   currentTool,
   onSelectTool,
+  activeLayer = 'civil',
+  onChangeActiveLayer,
+  layerVisibility = { civil: true, electrica: true },
+  onToggleLayerVisibility,
   areaPointCount,
   onUndoAreaPoint,
   onFinishArea,
@@ -92,8 +105,109 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   appMode = 'admin',
   onOpenAiRecognition
 }) => {
+  const isElectric = activeLayer === 'electrica';
+
   return (
     <div className="flex flex-col gap-2">
+      {/* 1. LAYER MANAGEMENT & MULTI-LAYER CONTROLLER BAR */}
+      <div className="bg-slate-900 border border-slate-700/80 rounded-xl p-2.5 shadow-md no-print text-white flex flex-wrap items-center justify-between gap-2.5">
+        {/* Active Working Layer Switcher */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            <Layers className="w-4 h-4 text-sky-400" />
+            <span className="hidden sm:inline">Capa Activa de Trabajo:</span>
+            <span className="sm:hidden">Capa:</span>
+          </span>
+
+          <div className="inline-flex bg-slate-950 p-1 rounded-lg border border-slate-800 shadow-inner">
+            {/* Obras Civiles Tab */}
+            <button
+              type="button"
+              onClick={() => {
+                if (onChangeActiveLayer) {
+                  onChangeActiveLayer('civil');
+                  if (camPrefix.startsWith('TD') || camPrefix.startsWith('TR') || camPrefix.startsWith('CE')) {
+                    onCamPrefixChange('C-');
+                  }
+                }
+              }}
+              className={`px-3 py-1.5 rounded-md text-xs font-black flex items-center gap-1.5 transition-all ${
+                activeLayer === 'civil'
+                  ? 'bg-amber-500 text-slate-950 shadow-md scale-[1.02]'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Capa Obras Civiles: Excavación, canalizaciones, bancos de ductos y cámaras de concreto"
+            >
+              <HardHat className="w-3.5 h-3.5" />
+              <span>🏗️ Obras Civiles</span>
+            </button>
+
+            {/* Obras Eléctricas Tab */}
+            <button
+              type="button"
+              onClick={() => {
+                if (onChangeActiveLayer) {
+                  onChangeActiveLayer('electrica');
+                  if (camPrefix === 'C-' || camPrefix === 'C') {
+                    onCamPrefixChange('TD-');
+                  }
+                }
+              }}
+              className={`px-3 py-1.5 rounded-md text-xs font-black flex items-center gap-1.5 transition-all ${
+                activeLayer === 'electrica'
+                  ? 'bg-cyan-500 text-slate-950 shadow-md scale-[1.02]'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Capa Obras Eléctricas: Redes de cableado, circuitos, alimentadores, tableros, transformadores y empalmes"
+            >
+              <Zap className="w-3.5 h-3.5 animate-pulse" />
+              <span>⚡ Obras Eléctricas</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Layer Visibility Toggles (Eye Controls for Overlapping) */}
+        {onToggleLayerVisibility && (
+          <div className="flex items-center gap-2 border-l border-slate-800 pl-3 flex-wrap">
+            <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+              <Eye className="w-3.5 h-3.5 text-slate-400" />
+              <span>Superposición:</span>
+            </span>
+
+            {/* Toggle Civil Layer Visibility */}
+            <button
+              type="button"
+              onClick={() => onToggleLayerVisibility('civil')}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1.5 border transition ${
+                layerVisibility.civil
+                  ? 'bg-amber-950/70 text-amber-300 border-amber-600/80 shadow-2xs'
+                  : 'bg-slate-950 text-slate-500 border-slate-800 opacity-60 line-through'
+              }`}
+              title="Mostrar / Ocultar Capa de Obras Civiles en el plano"
+            >
+              {layerVisibility.civil ? <Eye className="w-3 h-3 text-amber-400" /> : <EyeOff className="w-3 h-3 text-slate-500" />}
+              <span>Civiles</span>
+            </button>
+
+            {/* Toggle Electrica Layer Visibility */}
+            <button
+              type="button"
+              onClick={() => onToggleLayerVisibility('electrica')}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1.5 border transition ${
+                layerVisibility.electrica
+                  ? 'bg-cyan-950/70 text-cyan-300 border-cyan-600/80 shadow-2xs'
+                  : 'bg-slate-950 text-slate-500 border-slate-800 opacity-60 line-through'
+              }`}
+              title="Mostrar / Ocultar Capa de Obras Eléctricas en el plano"
+            >
+              {layerVisibility.electrica ? <Eye className="w-3 h-3 text-cyan-400" /> : <EyeOff className="w-3 h-3 text-slate-500" />}
+              <span>Eléctricas</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* 2. MAIN TOOLBAR: DRAWING TOOLS, ZOOM & AI */}
       <div className="bg-white border border-slate-200 rounded-xl p-2.5 shadow-sm no-print flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1 flex-wrap">
           {/* Pan / Inspect Tool */}
@@ -104,7 +218,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                 ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
             }`}
-            title="Mover lienzo o hacer clic y arrastrar cámaras o canalizaciones para reubicarlas en el plano"
+            title="Mover lienzo o hacer clic y arrastrar cámaras, tableros o canalizaciones para reubicarlas en el plano"
           >
             <Hand className="w-3.5 h-3.5 text-amber-900" />
             <span>Mover / Inspeccionar</span>
@@ -127,34 +241,50 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                 <span>Resaltador</span>
               </button>
 
-              {/* Straight Line Tool */}
+              {/* Straight Line Tool (Adaptive by active layer) */}
               <button
                 onClick={() => onSelectTool('straight')}
                 disabled={isLocked}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition ${
                   currentTool === 'straight'
-                    ? 'bg-sky-100 text-sky-900 border-sky-300'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
+                    ? isElectric
+                      ? 'bg-cyan-100 text-cyan-950 border-cyan-400 shadow-sm ring-1 ring-cyan-400'
+                      : 'bg-sky-100 text-sky-900 border-sky-300 shadow-sm ring-1 ring-sky-300'
+                    : isElectric
+                      ? 'bg-cyan-50 text-cyan-900 hover:bg-cyan-100 border-cyan-200'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
                 } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title="Trazo Recto de Canalización"
+                title={isElectric ? "Trazar Cableado / Circuito Eléctrico" : "Trazo Recto de Canalización Subterránea"}
               >
-                <Ruler className="w-3.5 h-3.5 text-sky-600" />
-                <span>Trazar Canalización</span>
+                {isElectric ? (
+                  <Zap className="w-3.5 h-3.5 text-cyan-600" />
+                ) : (
+                  <Ruler className="w-3.5 h-3.5 text-sky-600" />
+                )}
+                <span>{isElectric ? '⚡ Trazar Cableado / Circuito' : 'Trazar Canalización'}</span>
               </button>
 
-              {/* Camera Tool */}
+              {/* Camera / Electrical Node Tool (Adaptive by active layer) */}
               <button
                 onClick={() => onSelectTool('camera')}
                 disabled={isLocked}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition ${
                   currentTool === 'camera'
-                    ? 'bg-rose-100 text-rose-900 border-rose-300'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
+                    ? isElectric
+                      ? 'bg-cyan-100 text-cyan-950 border-cyan-400 shadow-sm ring-1 ring-cyan-400'
+                      : 'bg-rose-100 text-rose-900 border-rose-300 shadow-sm ring-1 ring-rose-300'
+                    : isElectric
+                      ? 'bg-cyan-50 text-cyan-900 hover:bg-cyan-100 border-cyan-200'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
                 } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title="Colocar Cámara o Caja"
+                title={isElectric ? "Colocar Tablero, Transformador o Nodo Eléctrico" : "Colocar Cámara de Inspección o Caja"}
               >
-                <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                <span>Cámaras / Cajas</span>
+                {isElectric ? (
+                  <Boxes className="w-3.5 h-3.5 text-cyan-600" />
+                ) : (
+                  <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                )}
+                <span>{isElectric ? '⚡ Tableros / Nodos' : 'Cámaras / Cajas'}</span>
               </button>
 
               {/* Area Demarcation Tool */}
@@ -273,16 +403,34 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             </div>
           )}
 
-          {/* Camera Prefix & Type Options */}
+          {/* Camera / Node Prefix & Type Options */}
           {currentTool === 'camera' && appMode === 'admin' && (
-            <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-rose-50 p-1 rounded-lg border border-rose-200">
-              <span className="font-medium text-slate-500">Prefijo:</span>
-              <input
-                type="text"
-                value={camPrefix}
-                onChange={(e) => onCamPrefixChange(e.target.value)}
-                className="w-10 px-1 py-0.5 border border-slate-300 rounded text-center text-xs font-bold uppercase bg-white"
-              />
+            <div className={`flex items-center gap-1.5 text-xs p-1 rounded-lg border ${
+              isElectric 
+                ? 'bg-cyan-50 text-cyan-900 border-cyan-200' 
+                : 'bg-rose-50 text-slate-600 border-rose-200'
+            }`}>
+              <span className="font-bold text-slate-600">{isElectric ? 'Nodo:' : 'Prefijo:'}</span>
+              {isElectric ? (
+                <select
+                  value={camPrefix}
+                  onChange={(e) => onCamPrefixChange(e.target.value)}
+                  className="px-1.5 py-0.5 border border-cyan-300 rounded text-xs font-black bg-white text-cyan-950"
+                >
+                  {ELECTRICAL_NODE_TYPES.map(n => (
+                    <option key={n.id} value={n.prefix}>
+                      {n.icon} {n.prefix} ({n.label.split('/')[0].trim()})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={camPrefix}
+                  onChange={(e) => onCamPrefixChange(e.target.value)}
+                  className="w-10 px-1 py-0.5 border border-slate-300 rounded text-center text-xs font-bold uppercase bg-white"
+                />
+              )}
               <span className="font-medium text-slate-500">N°:</span>
               <input
                 type="number"
@@ -291,29 +439,31 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                 onChange={(e) => onCamCounterChange(parseInt(e.target.value) || 1)}
                 className="w-12 px-1 py-0.5 border border-slate-300 rounded text-center text-xs font-bold bg-white"
               />
-              <select
-                value={camDefaultType}
-                onChange={(e) => onCamDefaultTypeChange(e.target.value as CameraNorm)}
-                className="px-1.5 py-0.5 border border-slate-300 rounded text-xs font-bold bg-white text-slate-800"
-              >
-                <option value="SB858">SB858 - 0,9x0,9m</option>
-                <option value="SB850">SB850 - 1,3x1,3m (BT)</option>
-                <option value="SB851">SB851 - 1,5x1,5m (MT)</option>
-                <option value="SB853">SB853 - 2,6x1,5m (MT)</option>
-              </select>
+              {!isElectric && (
+                <select
+                  value={camDefaultType}
+                  onChange={(e) => onCamDefaultTypeChange(e.target.value as CameraNorm)}
+                  className="px-1.5 py-0.5 border border-slate-300 rounded text-xs font-bold bg-white text-slate-800"
+                >
+                  <option value="SB858">SB858 - 0,9x0,9m</option>
+                  <option value="SB850">SB850 - 1,3x1,3m (BT)</option>
+                  <option value="SB851">SB851 - 1,5x1,5m (MT)</option>
+                  <option value="SB853">SB853 - 2,6x1,5m (MT)</option>
+                </select>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Canvas Display Toggles Bar */}
+      {/* 3. CANVAS DISPLAY TOGGLES & SCALE CONTROLLER BAR */}
       <div className="flex items-center justify-between text-xs bg-white px-3 py-2 rounded-lg border border-slate-200 text-slate-700 no-print flex-wrap gap-2 shadow-xs">
         <span className="font-bold text-slate-600 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
           <Eye className="w-3.5 h-3.5 text-slate-500" />
           <span>Etiquetas en Plano:</span>
         </span>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Cameras Toggle */}
+          {/* Cameras / Nodos Toggle */}
           <button
             onClick={onToggleCameraLabels}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-semibold transition ${
@@ -323,7 +473,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             }`}
           >
             {showCameraLabels ? <Eye className="w-3.5 h-3.5 text-rose-600" /> : <EyeOff className="w-3.5 h-3.5 text-slate-400" />}
-            <span>Cámaras: <strong className={showCameraLabels ? 'text-rose-700' : 'text-slate-400'}>{showCameraLabels ? 'ON' : 'OFF'}</strong></span>
+            <span>Nodos/Cámaras: <strong className={showCameraLabels ? 'text-rose-700' : 'text-slate-400'}>{showCameraLabels ? 'ON' : 'OFF'}</strong></span>
           </button>
 
           {/* Tramos Toggle */}
@@ -336,7 +486,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             }`}
           >
             {showLineLabels ? <Eye className="w-3.5 h-3.5 text-sky-600" /> : <EyeOff className="w-3.5 h-3.5 text-slate-400" />}
-            <span>Tramos: <strong className={showLineLabels ? 'text-sky-700' : 'text-slate-400'}>{showLineLabels ? 'ON' : 'OFF'}</strong></span>
+            <span>Líneas/Tramos: <strong className={showLineLabels ? 'text-sky-700' : 'text-slate-400'}>{showLineLabels ? 'ON' : 'OFF'}</strong></span>
           </button>
 
           {/* Specs Toggle */}
@@ -391,4 +541,3 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     </div>
   );
 };
-

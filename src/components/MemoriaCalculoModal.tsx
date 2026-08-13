@@ -404,23 +404,48 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
           };
         }
 
-        // --- FILAS 7 A 19: CONTENEDORES CON MARCO PARA IMÁGENES (312pt altura) ---
-        for (let r = 7; r <= 19; r++) {
+        // --- FILAS 7 A 22: CONTENEDORES CON MARCO PARA IMÁGENES (416pt altura) ---
+        for (let r = 7; r <= 22; r++) {
           const rObj = ws.getRow(r);
-          rObj.height = 24;
+          rObj.height = 26;
           for (let col = 1; col <= 5; col++) {
             const cell = rObj.getCell(col);
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: col <= 2 ? '0B1329' : 'F8FAFC' } };
             cell.border = {
               top: r === 7 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
-              bottom: r === 19 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
+              bottom: r === 22 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
               left: col === 1 || col === 3 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
               right: col === 2 || col === 5 ? { style: 'medium', color: { argb: '0F172A' } } : undefined
             };
           }
         }
-        ws.mergeCells('A7:B19');
-        ws.mergeCells('C7:E19');
+        ws.mergeCells('A7:B22');
+        ws.mergeCells('C7:E22');
+
+        // Funciones auxiliares de conversión exacta píxel -> coordenada flotante de Excel (evita deformaciones por anchos asimétricos)
+        const pixelToExcelCol = (px: number, startColIndex: number, widths: number[]): number => {
+          const widthsPx = widths.map(w => w * 7.5);
+          let rem = Math.max(0, px);
+          for (let i = 0; i < widthsPx.length; i++) {
+            if (rem <= widthsPx[i]) {
+              return startColIndex + i + (rem / widthsPx[i]);
+            }
+            rem -= widthsPx[i];
+          }
+          return startColIndex + widths.length;
+        };
+
+        const pixelToExcelRow = (px: number, startRowIndex: number, heights: number[]): number => {
+          const heightsPx = heights.map(h => h * 1.33333);
+          let rem = Math.max(0, px);
+          for (let i = 0; i < heightsPx.length; i++) {
+            if (rem <= heightsPx[i]) {
+              return startRowIndex + i + (rem / heightsPx[i]);
+            }
+            rem -= heightsPx[i];
+          }
+          return startRowIndex + heights.length;
+        };
 
         // Helper para insertar imágenes proporcionales sin deformación en Excel
         const addProportionalImageToExcel = async (
@@ -445,40 +470,36 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
               img.src = imgBase64;
             });
 
-            // Convertir anchos de columna y alturas de fila a píxeles equivalentes
             const totalContainerWidthPx = colWidths.reduce((sum, w) => sum + w * 7.5, 0);
-            const totalContainerHeightPx = rowHeights.reduce((sum, h) => sum + h * 1.333, 0);
+            const totalContainerHeightPx = rowHeights.reduce((sum, h) => sum + h * 1.33333, 0);
 
             const imgAspect = dims.width / dims.height;
-            const containerAspect = totalContainerWidthPx / totalContainerHeightPx;
 
-            const totalCols = endCol - startCol;
-            const totalRows = endRow - startRow;
+            // Margen interior de seguridad de 8px
+            const padX = 8;
+            const padY = 8;
+            const availW = Math.max(20, totalContainerWidthPx - padX * 2);
+            const availH = Math.max(20, totalContainerHeightPx - padY * 2);
 
-            // Margen interior de seguridad para preservar los bordes nítidos
-            const paddingRatio = 0.015;
-            let actualColSpan = totalCols * (1 - paddingRatio * 2);
-            let actualRowSpan = totalRows * (1 - paddingRatio * 2);
-
-            if (imgAspect > containerAspect) {
-              actualColSpan = totalCols * (1 - paddingRatio * 2);
-              const targetHeightPx = (totalContainerWidthPx * (1 - paddingRatio * 2)) / imgAspect;
-              const heightFraction = targetHeightPx / totalContainerHeightPx;
-              actualRowSpan = totalRows * Math.min(heightFraction, 1 - paddingRatio * 2);
-            } else {
-              actualRowSpan = totalRows * (1 - paddingRatio * 2);
-              const targetWidthPx = (totalContainerHeightPx * (1 - paddingRatio * 2)) * imgAspect;
-              const widthFraction = targetWidthPx / totalContainerWidthPx;
-              actualColSpan = totalCols * Math.min(widthFraction, 1 - paddingRatio * 2);
+            let fitW = availW;
+            let fitH = fitW / imgAspect;
+            if (fitH > availH) {
+              fitH = availH;
+              fitW = fitH * imgAspect;
             }
 
             // Centrado horizontal y vertical exacto dentro del contenedor
-            const tlCol = startCol + (totalCols - actualColSpan) / 2;
-            const tlRow = startRow + (totalRows - actualRowSpan) / 2;
+            const offsetX = padX + (availW - fitW) / 2;
+            const offsetY = padY + (availH - fitH) / 2;
+
+            const tlCol = pixelToExcelCol(offsetX, startCol, colWidths);
+            const brCol = pixelToExcelCol(offsetX + fitW, startCol, colWidths);
+            const tlRow = pixelToExcelRow(offsetY, startRow, rowHeights);
+            const brRow = pixelToExcelRow(offsetY + fitH, startRow, rowHeights);
 
             ws.addImage(imageId, {
               tl: { col: tlCol, row: tlRow },
-              br: { col: tlCol + actualColSpan, row: tlRow + actualRowSpan },
+              br: { col: brCol, row: brRow },
               editAs: 'oneCell'
             } as any);
           } catch(e) {
@@ -486,19 +507,19 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
           }
         };
 
-        const visualRowHeights = new Array(13).fill(24);
+        const visualRowHeights = new Array(16).fill(26);
 
-        // Capturar plano en alta resolución y ubicar sin deformación
+        // Capturar plano en alta resolución y ubicar sin deformación (Cols A-B, Filas 7-22)
         const mapEl = document.getElementById(`map-capture-${itemGroup.itemNo}`);
         if (mapEl) {
           try {
             const mapBase64 = await toPng(mapEl, { pixelRatio: 3, cacheBust: true });
             await addProportionalImageToExcel(
               mapBase64,
-              0, // Col A
+              0, // Col A (0-indexed)
               2, // Col B derecha
-              6, // Fila 7
-              19, // Fila 19
+              6, // Fila 7 (0-indexed = 6)
+              22, // Fila 22
               [16, 54],
               visualRowHeights
             );
@@ -514,23 +535,23 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
               2, // Col C
               5, // Col E derecha
               6, // Fila 7
-              19, // Fila 19
+              22, // Fila 22
               [14, 24, 24],
               visualRowHeights
             );
           } catch(e) { console.error("Error capturing photos", e); }
         }
 
-        // --- FILA 20: ESPACIADOR ---
-        ws.getRow(20).height = 6;
+        // --- FILA 23: ESPACIADOR ---
+        ws.getRow(23).height = 6;
 
-        // --- FILA 21: ENCABEZADO DE OBSERVACIONES ---
-        const row21 = ws.getRow(21);
-        row21.height = 22;
-        row21.values = ["OBSERVACIONES:", "", "", "", ""];
-        ws.mergeCells('A21:E21');
+        // --- FILA 24: ENCABEZADO DE OBSERVACIONES ---
+        const row24 = ws.getRow(24);
+        row24.height = 22;
+        row24.values = ["OBSERVACIONES:", "", "", "", ""];
+        ws.mergeCells('A24:E24');
         for (let col = 1; col <= 5; col++) {
-          const cell = row21.getCell(col);
+          const cell = row24.getCell(col);
           cell.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: 'FFFFFF' } };
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '334155' } };
           cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
@@ -542,10 +563,10 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
           };
         }
 
-        // --- FILAS 22 A 24: RECUADRO DE TEXTO DE OBSERVACIONES ---
+        // --- FILAS 25 A 27: RECUADRO DE TEXTO DE OBSERVACIONES ---
         const noteKey = `${selectedActa}_${itemGroup.itemNo}`;
         const noteVal = sheetNotes[noteKey] || '';
-        for (let r = 22; r <= 24; r++) {
+        for (let r = 25; r <= 27; r++) {
           const rObj = ws.getRow(r);
           rObj.height = 18;
           for (let col = 1; col <= 5; col++) {
@@ -554,26 +575,26 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
             cell.border = {
               left: col === 1 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
               right: col === 5 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
-              bottom: r === 24 ? { style: 'medium', color: { argb: '0F172A' } } : undefined
+              bottom: r === 27 ? { style: 'medium', color: { argb: '0F172A' } } : undefined
             };
           }
         }
-        ws.mergeCells('A22:E24');
-        const noteCell = ws.getCell('A22');
+        ws.mergeCells('A25:E27');
+        const noteCell = ws.getCell('A25');
         noteCell.value = noteVal || 'Sin observaciones técnicas adicionales registradas para este ítem en el acta actual.';
         noteCell.font = { name: 'Calibri', size: 9.5, italic: !noteVal, color: { argb: noteVal ? '0F172A' : '64748B' } };
         noteCell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
 
-        // --- FILA 25: ESPACIADOR ---
-        ws.getRow(25).height = 6;
+        // --- FILA 28: ESPACIADOR ---
+        ws.getRow(28).height = 6;
 
-        // --- FILA 26: TÍTULO DE LA TABLA DETALLADA ---
-        const row26 = ws.getRow(26);
-        row26.height = 24;
-        row26.values = ["DETALLE DE ELEMENTOS (MEMORIA DE CÁLCULO)", "", "", "", ""];
-        ws.mergeCells('A26:E26');
+        // --- FILA 29: TÍTULO DE LA TABLA DETALLADA ---
+        const row29 = ws.getRow(29);
+        row29.height = 24;
+        row29.values = ["DETALLE DE ELEMENTOS (MEMORIA DE CÁLCULO)", "", "", "", ""];
+        ws.mergeCells('A29:E29');
         for (let col = 1; col <= 5; col++) {
-          const cell = row26.getCell(col);
+          const cell = row29.getCell(col);
           cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFF' } };
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1E293B' } };
           cell.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -585,12 +606,12 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
           };
         }
 
-        // --- FILA 27: ENCABEZADOS DE COLUMNAS DE LA TABLA ---
-        const row27 = ws.getRow(27);
-        row27.height = 22;
-        row27.values = ["Etiqueta", "Tipo", "Estado", "Avance", "Cantidad Aportada"];
+        // --- FILA 30: ENCABEZADOS DE COLUMNAS DE LA TABLA ---
+        const row30 = ws.getRow(30);
+        row30.height = 22;
+        row30.values = ["Etiqueta", "Tipo", "Estado", "Avance", "Cantidad Aportada"];
         for (let col = 1; col <= 5; col++) {
-          const cell = row27.getCell(col);
+          const cell = row30.getCell(col);
           cell.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: 'FFFFFF' } };
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '475569' } };
           cell.alignment = {
@@ -605,8 +626,8 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
           };
         }
 
-        // --- FILAS 28+: REGISTROS DETALLADOS DE ELEMENTOS ---
-        let currentRowIdx = 28;
+        // --- FILAS 31+: REGISTROS DETALLADOS DE ELEMENTOS ---
+        let currentRowIdx = 31;
         let totalSumAportada = 0;
 
         filteredElements.forEach((el, elemIdx) => {
@@ -1987,29 +2008,39 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
                       </div>
 
                       {/* Canvas/Elements Graphic representation */}
-                      <div id={`map-capture-${itemGroup.itemNo}`} className="relative bg-slate-900 rounded-lg border border-slate-800 p-4 min-h-[340px] flex flex-col justify-between text-white overflow-hidden flex-1">
+                      <div id={`map-capture-${itemGroup.itemNo}`} className="relative bg-slate-900 rounded-lg border border-slate-800 p-4 min-h-[380px] flex flex-col justify-between text-white overflow-hidden flex-1">
                         <MemoriaCanvasMiniature blueprintImg={blueprintImg} elements={filteredElements} />
                         {/* Sub-elements list tags */}
                         <div className="flex flex-wrap gap-2 z-10">
-                          {filteredElements.map(el => (
-                            <div
-                              key={el.id}
-                              className={`px-3 py-1.5 rounded-md border text-xs font-bold flex items-center gap-2 shadow-sm ${
-                                el.status === 'Terminado'
-                                  ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500'
-                                  : 'bg-amber-950/90 text-amber-300 border-amber-500'
-                              }`}
-                            >
-                              <span className="w-2 h-2 rounded-full bg-current" />
-                              <span>{el.label}</span>
-                              <span className="text-[10px] opacity-80">
-                                ({el.type === 'line' ? `${el.meters || 0}m` : (el.camType || 'Cámara')})
-                              </span>
-                              <span className="bg-slate-800 text-slate-200 text-[9px] px-1.5 py-0.5 rounded font-mono">
-                                {el.status === 'En proceso' && el.progressPercent !== undefined ? `En proceso (${el.progressPercent}%)` : el.status}
-                              </span>
-                            </div>
-                          ))}
+                          {filteredElements.map(el => {
+                            const isElec = el.layer === 'electrica' || !!el.electricNodeType;
+                            return (
+                              <div
+                                key={el.id}
+                                className={`px-3 py-1.5 rounded-md border text-xs font-bold flex items-center gap-2 shadow-sm ${
+                                  isElec
+                                    ? 'bg-cyan-950/90 text-cyan-300 border-cyan-500'
+                                    : el.status === 'Terminado'
+                                    ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500'
+                                    : 'bg-amber-950/90 text-amber-300 border-amber-500'
+                                }`}
+                              >
+                                <span className="w-2 h-2 rounded-full bg-current" />
+                                <span>{el.label}</span>
+                                {isElec && el.circuitTag && (
+                                  <span className="text-[10px] text-cyan-200 font-mono bg-cyan-900/60 px-1 py-0.2 rounded border border-cyan-700/50">
+                                    {el.circuitTag}
+                                  </span>
+                                )}
+                                <span className="text-[10px] opacity-80">
+                                  ({el.type === 'line' ? `${el.meters || 0}m` : (el.camType || el.electricNodeType || 'Cámara')})
+                                </span>
+                                <span className="bg-slate-800 text-slate-200 text-[9px] px-1.5 py-0.5 rounded font-mono">
+                                  {el.status === 'En proceso' && el.progressPercent !== undefined ? `En proceso (${el.progressPercent}%)` : el.status}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
                         {/* Callout box overlay */}
                         <div className="mt-4 p-2.5 bg-rose-950/40 border border-rose-500/50 rounded-lg text-rose-200 text-xs font-mono flex items-center justify-between z-10 relative">

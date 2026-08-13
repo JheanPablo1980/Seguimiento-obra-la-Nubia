@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { InspectionElement } from '../types';
-import { ZoomIn, ZoomOut, RotateCcw, Maximize2 } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, Maximize2, Sparkles, Sliders } from 'lucide-react';
 
 interface MemoriaCanvasMiniatureProps {
   blueprintImg: HTMLImageElement | null;
@@ -66,17 +66,23 @@ export const MemoriaCanvasMiniature: React.FC<MemoriaCanvasMiniatureProps> = ({ 
 
   const handleZoomIn = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setUserZoom(z => Math.min(z * 1.3, 4.0));
+    setUserZoom(z => Math.min(z * 1.25, 4.0));
   };
 
   const handleZoomOut = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setUserZoom(z => Math.max(z / 1.3, 0.4));
+    setUserZoom(z => Math.max(z / 1.25, 0.4));
   };
 
   const handleResetZoom = (e: React.MouseEvent) => {
     e.stopPropagation();
     setUserZoom(1.0);
+    setUserPan({ x: 0, y: 0 });
+  };
+
+  const handleSetPresetZoom = (e: React.MouseEvent, zoom: number) => {
+    e.stopPropagation();
+    setUserZoom(zoom);
     setUserPan({ x: 0, y: 0 });
   };
 
@@ -121,21 +127,21 @@ export const MemoriaCanvasMiniature: React.FC<MemoriaCanvasMiniatureProps> = ({ 
         }
       });
 
-      const spanX = Math.max(maxX - minX, 40);
-      const spanY = Math.max(maxY - minY, 40);
+      const spanX = Math.max(maxX - minX, 30);
+      const spanY = Math.max(maxY - minY, 30);
 
-      // Smart dynamic padding tailored to element scale
-      const padX = Math.max(80, Math.min(spanX * 0.5, 300));
-      const padY = Math.max(80, Math.min(spanY * 0.5, 300));
+      // Smart dynamic padding tailored to element scale: keeps focus close, clear and high-resolution
+      const padX = Math.max(50, Math.min(spanX * 0.35, 160));
+      const padY = Math.max(50, Math.min(spanY * 0.35, 160));
 
       let boxX = Math.max(0, minX - padX);
       let boxY = Math.max(0, minY - padY);
       let boxW = Math.min(imgWidth - boxX, spanX + padX * 2);
       let boxH = Math.min(imgHeight - boxY, spanY + padY * 2);
 
-      // Maintain reasonable minimum dimension for clear architectural context
-      const minBoxW = Math.max(220, Math.min(imgWidth * 0.4, 600));
-      const minBoxH = Math.max(160, Math.min(imgHeight * 0.4, 450));
+      // Maintain crisp minimum dimension without forcing an oversized, distant viewport
+      const minBoxW = Math.max(140, Math.min(imgWidth * 0.25, 380));
+      const minBoxH = Math.max(110, Math.min(imgHeight * 0.25, 290));
 
       if (boxW < minBoxW) {
         const diff = minBoxW - boxW;
@@ -189,9 +195,11 @@ export const MemoriaCanvasMiniature: React.FC<MemoriaCanvasMiniatureProps> = ({ 
 
     // Draw elements with high-contrast outlines and clear badges
     validElements.forEach(el => {
+      const isElectrica = el.layer === 'electrica' || !!el.electricNodeType || (el.circuitTag && el.circuitTag.length > 0);
+      
       let color = '#94a3b8';
       if (el.status === 'En proceso') color = '#f59e0b';
-      if (el.status === 'Terminado') color = '#10b981';
+      if (el.status === 'Terminado') color = isElectrica ? '#06b6d4' : '#10b981';
 
       if (el.type === 'line' && el.x2 !== undefined && el.y2 !== undefined) {
         const cx = (el.x + el.x2) / 2;
@@ -201,10 +209,10 @@ export const MemoriaCanvasMiniature: React.FC<MemoriaCanvasMiniatureProps> = ({ 
         // 1. Red highlight inspection area ring
         ctx.save();
         ctx.beginPath();
-        ctx.arc(cx, cy, (lineLength / 2) + Math.max(20, 26 / finalScale), 0, Math.PI * 2);
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = Math.max(2.5, 3.5 / finalScale);
-        ctx.shadowColor = 'rgba(239, 68, 68, 0.4)';
+        ctx.arc(cx, cy, (lineLength / 2) + Math.max(18, 22 / finalScale), 0, Math.PI * 2);
+        ctx.strokeStyle = isElectrica ? '#06b6d4' : '#ef4444';
+        ctx.lineWidth = Math.max(2, 3 / finalScale);
+        ctx.shadowColor = isElectrica ? 'rgba(6, 182, 212, 0.5)' : 'rgba(239, 68, 68, 0.4)';
         ctx.shadowBlur = 8;
         ctx.stroke();
         ctx.restore();
@@ -214,30 +222,36 @@ export const MemoriaCanvasMiniature: React.FC<MemoriaCanvasMiniatureProps> = ({ 
         ctx.moveTo(el.x, el.y);
         ctx.lineTo(el.x2, el.y2);
         ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = Math.max(8, 10 / finalScale);
+        ctx.lineWidth = Math.max(7, 9 / finalScale);
         ctx.lineCap = 'round';
         ctx.stroke();
 
-        // 3. Colored pipe body
+        // 3. Colored pipe / circuit body
         ctx.beginPath();
         ctx.moveTo(el.x, el.y);
         ctx.lineTo(el.x2, el.y2);
         ctx.strokeStyle = color;
-        ctx.lineWidth = Math.max(5, 6.5 / finalScale);
+        ctx.lineWidth = Math.max(4.5, 6 / finalScale);
         ctx.lineCap = 'round';
+        if (isElectrica) {
+          ctx.setLineDash([8 / finalScale, 4 / finalScale]);
+        }
         ctx.stroke();
+        ctx.setLineDash([]);
 
         // 4. Label pill on canvas
-        const labelText = `${el.label} (${el.meters || 0}m)`;
+        const labelText = isElectrica && el.circuitTag 
+          ? `${el.label} [${el.circuitTag}] (${el.meters || 0}m)`
+          : `${el.label} (${el.meters || 0}m)`;
         const fontSize = Math.max(11, Math.round(13 / finalScale));
         ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`;
         const textWidth = ctx.measureText(labelText).width;
         const pillPadX = Math.max(6, 7 / finalScale);
         const pillPadY = Math.max(4, 5 / finalScale);
-        const badgeOffsetY = Math.max(28, 32 / finalScale);
+        const badgeOffsetY = Math.max(26, 30 / finalScale);
 
         ctx.save();
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
         ctx.shadowBlur = 6;
         ctx.shadowOffsetY = 2;
 
@@ -256,7 +270,7 @@ export const MemoriaCanvasMiniature: React.FC<MemoriaCanvasMiniatureProps> = ({ 
         ctx.stroke();
         ctx.restore();
 
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = isElectrica ? '#38bdf8' : '#ffffff';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(labelText, cx, cy - badgeOffsetY + fontSize / 2);
@@ -264,24 +278,24 @@ export const MemoriaCanvasMiniature: React.FC<MemoriaCanvasMiniatureProps> = ({ 
       } else if (el.type === 'camera') {
         const radius = Math.max(12, 14 / finalScale);
         
-        // 1. Red highlight inspection area ring around camera
+        // 1. Highlight inspection area ring around node
         ctx.save();
         ctx.beginPath();
-        ctx.arc(el.x, el.y, radius + Math.max(14, 18 / finalScale), 0, Math.PI * 2);
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = Math.max(2.5, 3.5 / finalScale);
-        ctx.shadowColor = 'rgba(239, 68, 68, 0.4)';
+        ctx.arc(el.x, el.y, radius + Math.max(12, 16 / finalScale), 0, Math.PI * 2);
+        ctx.strokeStyle = isElectrica ? '#06b6d4' : '#ef4444';
+        ctx.lineWidth = Math.max(2, 3 / finalScale);
+        ctx.shadowColor = isElectrica ? 'rgba(6, 182, 212, 0.5)' : 'rgba(239, 68, 68, 0.4)';
         ctx.shadowBlur = 8;
         ctx.stroke();
         ctx.restore();
 
-        // 2. Camera outer dark casing
+        // 2. Camera / Node outer dark casing
         ctx.beginPath();
         ctx.arc(el.x, el.y, radius + 2 / finalScale, 0, Math.PI * 2);
         ctx.fillStyle = '#0f172a';
         ctx.fill();
 
-        // 3. Camera circle body
+        // 3. Body
         ctx.beginPath();
         ctx.arc(el.x, el.y, radius, 0, Math.PI * 2);
         ctx.fillStyle = color;
@@ -290,10 +304,20 @@ export const MemoriaCanvasMiniature: React.FC<MemoriaCanvasMiniatureProps> = ({ 
         ctx.lineWidth = Math.max(2, 2.5 / finalScale);
         ctx.stroke();
 
-        // 4. Camera Norm indicator (MT, BT, D)
+        // 4. Indicator (Electrical icon or Cam Norm indicator MT, BT, D)
         const camTypeUpper = (el.camType || '').toUpperCase();
+        const upperLabel = el.label.toUpperCase();
+        const isTD = el.electricNodeType === 'tablero' || upperLabel.startsWith('TD');
+        const isTR = el.electricNodeType === 'transformador' || upperLabel.startsWith('TR');
+        const isLUM = el.electricNodeType === 'luminaria' || upperLabel.startsWith('LUM');
+        const isSPT = el.electricNodeType === 'spt' || upperLabel.startsWith('SPT');
+
         let normStr = '';
-        if (camTypeUpper.includes('MT')) normStr = 'MT';
+        if (isTD) normStr = '⚡TD';
+        else if (isTR) normStr = 'TR';
+        else if (isLUM) normStr = 'LUM';
+        else if (isSPT) normStr = 'SPT';
+        else if (camTypeUpper.includes('MT')) normStr = 'MT';
         else if (camTypeUpper.includes('D')) normStr = 'D';
         else if (camTypeUpper.includes('BT')) normStr = 'BT';
 
@@ -306,16 +330,16 @@ export const MemoriaCanvasMiniature: React.FC<MemoriaCanvasMiniatureProps> = ({ 
         }
 
         // 5. Label pill
-        const labelText = el.label;
+        const labelText = isElectrica && el.circuitTag ? `${el.label} [${el.circuitTag}]` : el.label;
         const fontSize = Math.max(11, Math.round(13 / finalScale));
         ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`;
         const textWidth = ctx.measureText(labelText).width;
         const pillPadX = Math.max(6, 7 / finalScale);
         const pillPadY = Math.max(4, 5 / finalScale);
-        const badgeOffsetY = radius + Math.max(20, 24 / finalScale);
+        const badgeOffsetY = radius + Math.max(18, 22 / finalScale);
 
         ctx.save();
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
         ctx.shadowBlur = 6;
         ctx.shadowOffsetY = 2;
 
@@ -334,7 +358,7 @@ export const MemoriaCanvasMiniature: React.FC<MemoriaCanvasMiniatureProps> = ({ 
         ctx.stroke();
         ctx.restore();
 
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = isElectrica ? '#38bdf8' : '#ffffff';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(labelText, el.x, el.y - badgeOffsetY + fontSize / 2);
@@ -361,7 +385,7 @@ export const MemoriaCanvasMiniature: React.FC<MemoriaCanvasMiniatureProps> = ({ 
 
       {/* Floating Zoom & Framing Controls */}
       <div 
-        className="absolute top-2 right-2 flex items-center gap-1 bg-slate-900/90 backdrop-blur-sm border border-slate-700/80 rounded-lg p-1 shadow-lg z-20 print:hidden"
+        className="absolute top-2 right-2 flex items-center gap-1 bg-slate-900/95 backdrop-blur-sm border border-slate-700/80 rounded-lg p-1 shadow-lg z-20 print:hidden"
         onMouseDown={e => e.stopPropagation()}
       >
         <button
@@ -388,11 +412,24 @@ export const MemoriaCanvasMiniature: React.FC<MemoriaCanvasMiniatureProps> = ({ 
         >
           <RotateCcw className="w-3.5 h-3.5" />
         </button>
-        <span className="text-[10px] font-mono font-bold text-slate-400 px-1 border-l border-slate-700">
-          {Math.round(userZoom * 100)}%
-        </span>
+        <div className="flex items-center gap-1 border-l border-slate-700 pl-1">
+          <button
+            type="button"
+            onClick={(e) => handleSetPresetZoom(e, 1.4)}
+            title="Escala Detallada 140%"
+            className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition ${
+              Math.abs(userZoom - 1.4) < 0.05 ? 'bg-amber-500/30 text-amber-300' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            Detalle
+          </button>
+          <span className="text-[10px] font-mono font-bold text-slate-300 px-1">
+            {Math.round(userZoom * 100)}%
+          </span>
+        </div>
       </div>
     </div>
   );
 };
+
 

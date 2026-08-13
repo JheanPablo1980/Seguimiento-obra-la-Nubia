@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { InspectionElement, FilterState } from '../types';
 import { normalizeActa } from '../utils/actaUtils';
 import { calcularAvancePorCronograma } from '../utils/cronogramaUtils';
-import { Camera, Ruler, CalendarDays, TrendingUp, Filter, FileText, CheckCircle2, Clock, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { normalizeLayer } from '../utils/layerUtils';
+import { Camera, Ruler, CalendarDays, TrendingUp, Filter, FileText, CheckCircle2, Clock, AlertCircle, ChevronDown, ChevronUp, Layers, Zap } from 'lucide-react';
 
 interface KpiMetricsProps {
   elements: InspectionElement[];
@@ -17,8 +18,11 @@ export const KpiMetrics: React.FC<KpiMetricsProps> = ({
 }) => {
   const [showActasDetail, setShowActasDetail] = useState(true);
 
-  // Filter elements according to date filter if set
+  // Filter elements according to layer and date filter if set
   const filteredElements = elements.filter(e => {
+    if (filter.layerFilter && filter.layerFilter !== 'all') {
+      if (normalizeLayer(e.layer) !== filter.layerFilter) return false;
+    }
     if (filter.startDate && e.date < filter.startDate) return false;
     if (filter.endDate && e.date > filter.endDate) return false;
     if (filter.actaFilter && normalizeActa(e.acta) !== filter.actaFilter) return false;
@@ -38,7 +42,7 @@ export const KpiMetrics: React.FC<KpiMetricsProps> = ({
     pendiente: number;
   }>();
 
-  elements.forEach(e => {
+  filteredElements.forEach(e => {
     const key = normalizeActa(e.acta);
     if (!actasMap.has(key)) {
       actasMap.set(key, {
@@ -153,13 +157,23 @@ export const KpiMetrics: React.FC<KpiMetricsProps> = ({
     });
   };
 
+  const isElect = filter.layerFilter === 'electrica';
+  const isCivil = filter.layerFilter === 'civil';
+
   return (
     <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 text-white rounded-xl p-3.5 shadow-md flex flex-col gap-3">
-      {/* Date Filter & Cutoff Toolbar */}
+      {/* Date & Layer Filter & Cutoff Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-800/90 p-2.5 rounded-lg border border-slate-700/80 text-xs no-print">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Filter className="w-4 h-4 text-amber-400" />
           <span className="font-bold text-slate-200 uppercase tracking-wider text-[11px]">Corte de Seguimiento:</span>
+          {filter.layerFilter && filter.layerFilter !== 'all' && (
+            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+              isElect ? 'bg-cyan-950 text-cyan-300 border-cyan-700' : 'bg-amber-950 text-amber-300 border-amber-700'
+            }`}>
+              {isElect ? '⚡ Capa Eléctrica' : '🏗️ Capa Civil'}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -221,28 +235,36 @@ export const KpiMetrics: React.FC<KpiMetricsProps> = ({
 
       {/* KPI Metrics Display Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Camera Metric */}
+        {/* Camera / Node Metric */}
         <div className="flex items-center gap-3 bg-slate-800/80 p-2.5 rounded-lg border border-slate-700/60">
-          <div className="w-10 h-10 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center font-bold shrink-0">
-            <Camera className="w-5 h-5" />
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold shrink-0 ${
+            isElect ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-400' : 'bg-rose-500/20 border border-rose-500/40 text-rose-400'
+          }`}>
+            {isElect ? <Zap className="w-5 h-5" /> : <Camera className="w-5 h-5" />}
           </div>
           <div>
-            <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Promedio Cámaras</span>
+            <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">
+              {isElect ? 'Ritmo Nodos Eléc.' : 'Promedio Cámaras'}
+            </span>
             <div className="flex items-baseline gap-1.5">
               <span className="text-xl font-extrabold text-white">{camRate}</span>
-              <span className="text-[11px] font-semibold text-rose-300">cám / semana</span>
+              <span className="text-[11px] font-semibold text-rose-300">
+                {isElect ? 'nodos / sem' : 'cám / sem'}
+              </span>
             </div>
             <span className="text-[10px] text-slate-400">Total: {installedCams} inst. / {totalCams} proy.</span>
           </div>
         </div>
 
-        {/* Pipeline Metric */}
+        {/* Pipeline / Circuit Metric */}
         <div className="flex items-center gap-3 bg-slate-800/80 p-2.5 rounded-lg border border-slate-700/60">
           <div className="w-10 h-10 rounded-lg bg-sky-500/20 border border-sky-500/40 text-sky-400 flex items-center justify-center font-bold shrink-0">
             <Ruler className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Promedio Tubería</span>
+            <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">
+              {isElect ? 'Ritmo Ductos / Cond.' : 'Promedio Tubería'}
+            </span>
             <div className="flex items-baseline gap-1.5">
               <span className="text-xl font-extrabold text-white">{pipeRate}</span>
               <span className="text-[11px] font-semibold text-sky-300">m / semana</span>

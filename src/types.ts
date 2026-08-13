@@ -58,6 +58,8 @@ export interface ScheduleItem {
   rawExtras?: Record<string, string>;
 }
 
+export type ProjectLayer = 'civil' | 'electrica';
+
 export type FindingStage = 'Antes' | 'Durante' | 'Después' | 'Hallazgo' | 'No Conformidad' | 'Inspección' | 'Avance' | string;
 
 export interface ElementPhotoRecord {
@@ -74,6 +76,7 @@ export interface ElementPhotoRecord {
 export interface InspectionElement {
   id: number;
   type: 'camera' | 'line';
+  layer?: ProjectLayer; // 'civil' (Obras Civiles) | 'electrica' (Obras Eléctricas)
   label: string;
   status: StatusType;
   x: number;
@@ -85,8 +88,10 @@ export interface InspectionElement {
   pipes?: string;
   cables?: string;
   onlyPipes?: boolean; // When true, this line tramo only requires conduit/tubería, no cables
-  // For cameras
+  // For cameras / electrical nodes
   camType?: CameraNorm;
+  electricNodeType?: 'tablero' | 'transformador' | 'camara_electrica' | 'luminaria' | 'empalme' | 'caja_paso' | 'punto_fuerza' | string;
+  circuitTag?: string; // e.g. "C-01 / 220V", "ALIM-TR-01"
   size?: number;
   // Schedule / Cronograma linkage
   scheduleItemId?: string;
@@ -134,6 +139,7 @@ export interface FilterState {
   searchQuery: string;
   statusFilter: 'all' | StatusType;
   actaFilter?: string; // Optional filter by specific Acta (e.g. "Acta 1")
+  layerFilter?: 'all' | 'civil' | 'electrica'; // Filter by layer: Obras Civiles vs Obras Eléctricas
 }
 
 export interface ActivityLog {
