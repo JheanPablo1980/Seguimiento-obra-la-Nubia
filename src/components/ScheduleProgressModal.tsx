@@ -748,6 +748,7 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
 
   const handleSyncMetasAndUnits = () => {
     let updatedCount = 0;
+    let resetToZeroCount = 0;
     const updatedSchedule = scheduleItems.map(item => {
       const descLower = (item.description || '').toLowerCase();
       const codeUpper = (item.code || '').toUpperCase();
@@ -769,9 +770,16 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
       }
 
       // Find all matching elements in bitácora
-      const matchingEls = elements.filter(el => 
-        matchElementToScheduleId(el, item.id) || matchElementToScheduleId(el, item.code)
-      );
+      const matchingEls = elements.filter(el => {
+        if (el.scheduleItemId) {
+          const raw = el.scheduleItemId.trim().toUpperCase();
+          if (raw === item.id.trim().toUpperCase() || (item.code && raw === item.code.trim().toUpperCase())) {
+            return true;
+          }
+        }
+        return matchElementToScheduleId(el, item.id, scheduleItems) || 
+          (item.code ? matchElementToScheduleId(el, item.code, scheduleItems) : false);
+      });
 
       let bitacoraTotal = 0;
       if (matchingEls.length > 0) {
@@ -793,7 +801,11 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
         }
       }
 
-      const newTarget = bitacoraTotal > 0 ? bitacoraTotal : (item.targetQuantity || 100);
+      // Resetear a 0 los rubros cuyas cantidades no provengan de la bitácora
+      const newTarget = bitacoraTotal > 0 ? bitacoraTotal : 0;
+      if (newTarget === 0 && item.targetQuantity !== 0) {
+        resetToZeroCount++;
+      }
       if (newTarget !== item.targetQuantity || unit !== item.unit) {
         updatedCount++;
       }
@@ -806,7 +818,10 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
     });
 
     onUpdateScheduleItems(updatedSchedule);
-    showToast(`¡Metas y unidades del cronograma sincronizadas desde la bitácora! (${updatedCount} rubros actualizados)`);
+    const msg = resetToZeroCount > 0 
+      ? `¡Metas sincronizadas! ${resetToZeroCount} rubro(s) sin elementos en bitácora fueron reseteados a 0 en Pendiente Total.`
+      : `¡Metas y unidades sincronizadas desde la bitácora! (${updatedCount} rubros actualizados)`;
+    showToast(msg);
   };
 
   const handlePurgeUnmatchedItems = () => {
