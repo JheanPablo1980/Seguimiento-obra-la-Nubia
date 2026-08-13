@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback, useImperativeHandle } 
 import { AreaSector, FreehandStroke, InspectionElement, Point, CameraNorm, ProjectMeta } from '../types';
 import { ToolType } from './CanvasToolbar';
 import { adjustTramoMeters } from '../utils/tramoUtils';
+import { getElementPhotoRecords } from '../utils/photoUtils';
 import { Plus, Minus, Ruler } from 'lucide-react';
 
 export interface BlueprintCanvasRef {
@@ -561,6 +562,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       if (el.status === 'En proceso') colorHex = '#f59e0b';
       if (el.status === 'Terminado') colorHex = '#10b981';
 
+      const pCount = getElementPhotoRecords(el).length;
+
       if (el.type === 'line' && el.x2 !== undefined && el.y2 !== undefined) {
         drawLineElement(
           ctx,
@@ -571,7 +574,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           el.label,
           el.meters || 0,
           colorHex,
-          el.photos?.length || 0,
+          pCount,
           true,
           true,
           el.pipes,
@@ -580,7 +583,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           el.acta
         );
       } else if (el.type === 'camera') {
-        const photoStr = el.photos && el.photos.length > 0 ? ` 📷${el.photos.length}` : '';
+        const photoStr = pCount > 0 ? ` 📷${pCount}` : '';
         const actaItemTag = [el.acta, el.itemCobro ? `Ítem ${el.itemCobro}` : ''].filter(Boolean).join(' | ');
         const camSubStr = [actaItemTag ? `[${actaItemTag}]` : '', el.camType].filter(Boolean).join(' ');
         const statusLabel = el.status === 'En proceso' && el.progressPercent !== undefined ? `En proceso (${el.progressPercent}%)` : el.status;
@@ -830,6 +833,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       if (el.status === 'En proceso') colorHex = '#f59e0b';
       if (el.status === 'Terminado') colorHex = '#10b981';
 
+      const pCount = getElementPhotoRecords(el).length;
+
       if (el.type === 'line' && el.x2 !== undefined && el.y2 !== undefined) {
         drawLineElement(
           ctx,
@@ -840,7 +845,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           el.label,
           el.meters || 0,
           colorHex,
-          el.photos?.length || 0,
+          pCount,
           showLineLabels,
           showSpecsLabels,
           el.pipes,
@@ -849,7 +854,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           el.acta
         );
       } else if (el.type === 'camera') {
-        const photoStr = el.photos && el.photos.length > 0 ? ` 📷${el.photos.length}` : '';
+        const photoStr = pCount > 0 ? ` 📷${pCount}` : '';
         const actaItemTag = [el.acta, el.itemCobro ? `Ítem ${el.itemCobro}` : ''].filter(Boolean).join(' | ');
         const camSubStr = showSpecsLabels ? [actaItemTag ? `[${actaItemTag}]` : '', el.camType].filter(Boolean).join(' ') : undefined;
         const statusLabel = el.status === 'En proceso' && el.progressPercent !== undefined ? `En proceso (${el.progressPercent}%)` : el.status;

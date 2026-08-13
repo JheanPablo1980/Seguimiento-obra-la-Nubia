@@ -4,6 +4,7 @@ import { DEFAULT_CONTRACTUAL_ITEMS } from '../data/sampleData';
 import { formatExecutionTime } from '../utils/timeUtils';
 import { adjustTramoMeters } from '../utils/tramoUtils';
 import { normalizeActa, getAvailableActas } from '../utils/actaUtils';
+import { getElementPhotoRecords } from '../utils/photoUtils';
 import { 
   ClipboardList, 
   Plus, 
@@ -404,13 +405,29 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                   {/* Action Bar */}
                   <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
                     <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => onInspectElement(el)}
-                        className="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 font-bold border border-sky-200 rounded-lg flex items-center gap-1 transition shadow-2xs"
-                      >
-                        <Camera className="w-3.5 h-3.5 text-sky-600" />
-                        <span>Fotos ({el.photos?.length || 0})</span>
-                      </button>
+                      {(() => {
+                        const records = getElementPhotoRecords(el);
+                        const hasFindings = records.some(r => (r.finding && r.finding.length > 0) || (r.stage || '').toLowerCase().includes('hallazgo'));
+                        return (
+                          <button
+                            onClick={() => onInspectElement(el)}
+                            className={`px-2.5 py-1.5 font-bold border rounded-lg flex items-center gap-1 transition shadow-2xs ${
+                              hasFindings 
+                                ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300' 
+                                : 'bg-sky-50 hover:bg-sky-100 text-sky-800 border-sky-200'
+                            }`}
+                            title="Ver fotos y trazabilidad de hallazgos por fecha"
+                          >
+                            <Camera className={`w-3.5 h-3.5 ${hasFindings ? 'text-amber-600' : 'text-sky-600'}`} />
+                            <span>Fotos ({records.length})</span>
+                            {hasFindings && (
+                              <span className="bg-amber-500 text-slate-950 text-[9px] px-1 rounded-full font-black">
+                                Hallazgo
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })()}
 
                       <button
                         onClick={() => onInspectElement(el)}
@@ -720,18 +737,30 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                     </td>
                     <td className="py-2 px-1 text-center no-print" data-label="Acción">
                       <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => onInspectElement(el)}
-                          className="p-1 text-sky-600 hover:text-sky-800 hover:bg-sky-50 rounded flex items-center gap-0.5"
-                          title="Tomar / Ver Fotos y Bitácora"
-                        >
-                          <Camera className="w-3.5 h-3.5" />
-                          {el.photos && el.photos.length > 0 && (
-                            <span className="text-[10px] font-bold bg-sky-100 text-sky-800 px-1 rounded-full">
-                              {el.photos.length}
-                            </span>
-                          )}
-                        </button>
+                        {(() => {
+                          const records = getElementPhotoRecords(el);
+                          const hasFindings = records.some(r => (r.finding && r.finding.length > 0) || (r.stage || '').toLowerCase().includes('hallazgo'));
+                          return (
+                            <button
+                              onClick={() => onInspectElement(el)}
+                              className={`p-1 rounded flex items-center gap-0.5 transition ${
+                                hasFindings 
+                                  ? 'text-amber-700 bg-amber-100 hover:bg-amber-200' 
+                                  : 'text-sky-600 hover:text-sky-800 hover:bg-sky-50'
+                              }`}
+                              title="Ver / Tomar Fotos y Trazabilidad por fecha"
+                            >
+                              <Camera className="w-3.5 h-3.5" />
+                              {records.length > 0 && (
+                                <span className={`text-[10px] font-bold px-1 rounded-full ${
+                                  hasFindings ? 'bg-amber-500 text-slate-950' : 'bg-sky-100 text-sky-800'
+                                }`}>
+                                  {records.length}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })()}
                         <button
                           onClick={() => onInspectElement(el)}
                           className="p-1 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded"

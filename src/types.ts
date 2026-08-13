@@ -58,6 +58,19 @@ export interface ScheduleItem {
   rawExtras?: Record<string, string>;
 }
 
+export type FindingStage = 'Antes' | 'Durante' | 'Después' | 'Hallazgo' | 'No Conformidad' | 'Inspección' | 'Avance' | string;
+
+export interface ElementPhotoRecord {
+  id: string; // Unique identifier for the photo finding
+  url: string; // Base64 data URL or external URL
+  date: string; // YYYY-MM-DD (fecha del hallazgo / foto)
+  timestamp?: string; // HH:MM:SS
+  finding?: string; // Descripción del hallazgo / observación técnica detallada
+  inspectorName?: string; // Inspector o responsable de la toma
+  stage?: FindingStage; // Clasificación / Etapa (Hallazgo, Avance, etc.)
+  severity?: 'Normal' | 'Leve' | 'Grave' | 'Crítico'; // Severidad en caso de hallazgo/no conformidad
+}
+
 export interface InspectionElement {
   id: number;
   type: 'camera' | 'line';
@@ -95,7 +108,8 @@ export interface InspectionElement {
   lastUpdate?: string;
   date: string;
   rowId?: number;
-  photos?: string[];
+  photos?: string[]; // Legacy photo array kept for backwards compatibility
+  photoRecords?: ElementPhotoRecord[]; // Structured photos by date & finding
 }
 
 export interface ActaDocument {

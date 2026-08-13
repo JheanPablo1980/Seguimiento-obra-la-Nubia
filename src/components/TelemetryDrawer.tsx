@@ -4,7 +4,9 @@ import { DEFAULT_CONTRACTUAL_ITEMS } from '../data/sampleData';
 import { supabaseAudit } from '../lib/supabase';
 import { adjustTramoMeters } from '../utils/tramoUtils';
 import { normalizeActa, getAvailableActas } from '../utils/actaUtils';
-import { ClipboardList, Clock, X, ShieldCheck, Activity, AlertTriangle, Trash2, Calendar, Tag, Ruler, Wifi, Camera, Image, Eye, CalendarCheck, FileText, Plus, Minus, Move, History } from 'lucide-react';
+import { ElementPhotoTimeline } from './ElementPhotoTimeline';
+import { getElementPhotoRecords } from '../utils/photoUtils';
+import { ClipboardList, Clock, X, ShieldCheck, Activity, AlertTriangle, Trash2, Calendar, Tag, Ruler, Wifi, Camera, Image, Eye, CalendarCheck, FileText, Plus, Minus, Move, History, Sparkles } from 'lucide-react';
 
 interface TelemetryDrawerProps {
   element: InspectionElement | null;
@@ -14,6 +16,7 @@ interface TelemetryDrawerProps {
   areaName: string;
   scheduleItems?: ScheduleItem[];
   globalConfig?: GlobalConfig;
+  initialTab?: 'details' | 'photos' | 'history';
 }
 
 export const TelemetryDrawer: React.FC<TelemetryDrawerProps> = ({
@@ -23,13 +26,20 @@ export const TelemetryDrawer: React.FC<TelemetryDrawerProps> = ({
   onDeleteElement,
   areaName,
   scheduleItems = [],
-  globalConfig
+  globalConfig,
+  initialTab = 'details'
 }) => {
   const [activePhotoUrl, setActivePhotoUrl] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'photos' | 'history'>(initialTab);
   const [historyLogs, setHistoryLogs] = useState<VersionHistoryLog[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [contractItems, setContractItems] = useState<ContractualItem[]>([]);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   useEffect(() => {
     const loadContractItems = () => {
@@ -100,61 +110,14 @@ export const TelemetryDrawer: React.FC<TelemetryDrawerProps> = ({
     });
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    Array.from(files).forEach((file: File) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new window.Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          const maxDim = 1200;
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-            const existingPhotos = element.photos || [];
-            onUpdateElement({
-              ...element,
-              photos: [...existingPhotos, compressedDataUrl],
-              lastUpdate: new Date().toLocaleTimeString()
-            });
-          }
-        };
-        img.src = event.target?.result as string;
-      };
-      reader.readAsDataURL(file);
-    });
-    e.target.value = '';
-  };
-
-  const handleDeletePhoto = (index: number) => {
-    const existingPhotos = element.photos || [];
-    const updated = existingPhotos.filter((_, i) => i !== index);
-    onUpdateElement({
-      ...element,
-      photos: updated,
-      lastUpdate: new Date().toLocaleTimeString()
-    });
-  };
+  const photoRecords = getElementPhotoRecords(element);
+  const totalFindings = photoRecords.filter(r => {
+    const s = (r.stage || '').toLowerCase();
+    return s.includes('hallazgo') || s.includes('no conformidad') || (r.finding && r.finding.length > 0);
+  }).length;
 
   return (
-    <div className="fixed inset-y-0 right-0 max-w-sm w-full bg-slate-900 text-white shadow-2xl z-50 p-5 flex flex-col justify-between border-l border-slate-800 animate-in slide-in-from-right duration-200 overflow-y-auto">
+    <div className="fixed inset-y-0 right-0 max-w-md w-full bg-slate-900 text-white shadow-2xl z-50 p-5 flex flex-col justify-between border-l border-slate-800 animate-in slide-in-from-right duration-200 overflow-y-auto">
       <div className="flex flex-col gap-4">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -185,22 +148,56 @@ export const TelemetryDrawer: React.FC<TelemetryDrawerProps> = ({
           </div>
         </div>
 
-        <div className="flex bg-slate-800 rounded-lg p-1">
+        {/* 3-Tab Navigator */}
+        <div className="flex bg-slate-800 rounded-lg p-1 text-xs">
           <button
             onClick={() => setActiveTab('details')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-semibold transition ${activeTab === 'details' ? 'bg-sky-500/20 text-sky-300' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md font-semibold transition ${activeTab === 'details' ? 'bg-sky-500/20 text-sky-300' : 'text-slate-400 hover:text-slate-200'}`}
           >
             <Eye className="w-3.5 h-3.5" /> Detalles
           </button>
           <button
+            onClick={() => setActiveTab('photos')}
+            className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md font-semibold transition ${activeTab === 'photos' ? 'bg-sky-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            <Camera className="w-3.5 h-3.5" />
+            <span>Fotos</span>
+            <span className="bg-slate-900 text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+              {photoRecords.length}
+            </span>
+          </button>
+          <button
             onClick={() => setActiveTab('history')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-semibold transition ${activeTab === 'history' ? 'bg-amber-500/20 text-amber-300' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md font-semibold transition ${activeTab === 'history' ? 'bg-amber-500/20 text-amber-300' : 'text-slate-400 hover:text-slate-200'}`}
           >
             <History className="w-3.5 h-3.5" /> Historial
           </button>
         </div>
 
-        {activeTab === 'details' ? (
+        {activeTab === 'photos' ? (
+          <div className="space-y-4">
+            <div className="bg-slate-800/80 rounded-xl p-3 border border-slate-700/80">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>Evidencia y Trazabilidad de {element.label}</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Almacenamiento y cronología de fotos y hallazgos por fecha.
+                  </p>
+                </div>
+                <span className="text-xs bg-purple-950 text-purple-300 border border-purple-800 px-2 py-0.5 rounded font-bold">
+                  {areaName || 'Sector general'}
+                </span>
+              </div>
+            </div>
+
+            <ElementPhotoTimeline
+              element={element}
+              onUpdateElement={onUpdateElement}
+            />
+          </div>
+        ) : activeTab === 'details' ? (
           <>
             {/* Basic Info: Editable Label & Date */}
             <div className="bg-slate-800/90 rounded-xl p-3 border border-slate-700/80 space-y-3">
@@ -609,71 +606,11 @@ export const TelemetryDrawer: React.FC<TelemetryDrawerProps> = ({
           )}
         </div>
 
-        {/* Photos / Evidence Section */}
-        <div className="bg-slate-800/90 rounded-xl p-3 border border-slate-700/80 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-sky-400 text-[11px] uppercase tracking-wider flex items-center gap-1">
-              <Camera className="w-3.5 h-3.5 text-sky-400" /> Registro Fotográfico
-            </span>
-            <span className="text-[10px] text-slate-400 font-mono">
-              {element.photos?.length || 0} fotos
-            </span>
-          </div>
-
-          {/* Upload / Capture Button */}
-          <div>
-            <label className="w-full py-2.5 px-3 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-md">
-              <Camera className="w-4 h-4" />
-              <span>Tomar Foto / Adjuntar Evidencia</span>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                multiple
-                onChange={handlePhotoUpload}
-                className="hidden"
-              />
-            </label>
-          </div>
-
-          {/* Photo Thumbnails */}
-          {element.photos && element.photos.length > 0 ? (
-            <div className="grid grid-cols-3 gap-2 pt-1">
-              {element.photos.map((photoUrl, idx) => (
-                <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-700 bg-slate-950 aspect-square">
-                  <img
-                    src={photoUrl}
-                    alt={`Evidencia ${idx + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-1.5 p-1">
-                    <button
-                      type="button"
-                      onClick={() => setActivePhotoUrl(photoUrl)}
-                      className="p-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-md"
-                      title="Ver foto amplia"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeletePhoto(idx)}
-                      className="p-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-md"
-                      title="Eliminar foto"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800 text-center text-slate-500 text-xs">
-              <Image className="w-6 h-6 mx-auto mb-1 opacity-40 text-slate-400" />
-              <span>Sin fotos registradas para este {element.type === 'camera' ? 'elemento' : 'tramo'}</span>
-            </div>
-          )}
-        </div>
+        {/* Photos & Findings Section */}
+        <ElementPhotoTimeline
+          element={element}
+          onUpdateElement={onUpdateElement}
+        />
 
         {/* Technical Specs & Dimensions Editing */}
         <div className="bg-slate-800/90 rounded-xl p-3 border border-slate-700/80 flex flex-col gap-2.5 text-xs">

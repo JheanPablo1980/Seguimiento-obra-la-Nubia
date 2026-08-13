@@ -6,6 +6,7 @@ import { MemoriaCanvasMiniature } from '../components/MemoriaCanvasMiniature';
 import { DEFAULT_CONTRACTUAL_ITEMS } from '../data/sampleData';
 import { normalizeActa, getAvailableActas } from '../utils/actaUtils';
 import { normalizarPorcentaje, calcularAvancePorCronograma } from '../utils/cronogramaUtils';
+import { getElementPhotoRecords, formatFindingDate, getStageBadgeStyle } from '../utils/photoUtils';
 import { 
   X, 
   Printer, 
@@ -2037,13 +2038,25 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
                       {/* Photos grid */}
                       <div id={`photo-capture-${itemGroup.itemNo}`} className="flex-1 flex flex-col relative bg-white">
                       {(() => {
-                        const allPhotos: Array<{ elLabel: string; photoUrl: string }> = [];
+                        const allPhotos: Array<{ 
+                          elLabel: string; 
+                          photoUrl: string; 
+                          date: string; 
+                          finding?: string; 
+                          stage?: string;
+                        }> = [];
+                        
                         filteredElements.forEach(el => {
-                          if (el.photos && el.photos.length > 0) {
-                            el.photos.forEach(p => {
-                              allPhotos.push({ elLabel: el.label, photoUrl: p });
+                          const records = getElementPhotoRecords(el);
+                          records.forEach(r => {
+                            allPhotos.push({
+                              elLabel: el.label,
+                              photoUrl: r.url,
+                              date: r.date,
+                              finding: r.finding,
+                              stage: r.stage
                             });
-                          }
+                          });
                         });
 
                         if (allPhotos.length === 0) {
@@ -2060,18 +2073,33 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
 
                         return (
                           <div className="grid grid-cols-2 gap-3 flex-1">
-                            {allPhotos.map((photoItem, pIdx) => (
-                              <div key={pIdx} className="border border-slate-300 rounded overflow-hidden bg-slate-100 flex flex-col">
-                                <img
-                                  src={photoItem.photoUrl}
-                                  alt={`Evidencia ${photoItem.elLabel}`}
-                                  className="w-full flex-1 object-cover min-h-[150px] max-h-[300px]"
-                                />
-                                <div className="p-1.5 bg-slate-900 text-white text-[10px] font-bold text-center truncate">
-                                  {photoItem.elLabel} - Foto #{pIdx + 1}
+                            {allPhotos.map((photoItem, pIdx) => {
+                              const badgeStyle = getStageBadgeStyle(photoItem.stage);
+                              return (
+                                <div key={pIdx} className="border border-slate-300 rounded overflow-hidden bg-slate-50 flex flex-col shadow-xs">
+                                  <img
+                                    src={photoItem.photoUrl}
+                                    alt={`Evidencia ${photoItem.elLabel}`}
+                                    className="w-full flex-1 object-cover min-h-[140px] max-h-[260px]"
+                                  />
+                                  <div className="p-2 bg-slate-900 text-white text-[10px] flex flex-col gap-1">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="font-bold text-sky-300 truncate">
+                                        {photoItem.elLabel}
+                                      </span>
+                                      <span className="text-amber-300 font-mono text-[9px] shrink-0">
+                                        📅 {formatFindingDate(photoItem.date)}
+                                      </span>
+                                    </div>
+                                    {photoItem.finding && (
+                                      <p className="text-[9px] text-slate-300 bg-slate-950/80 rounded px-1.5 py-0.5 border border-slate-800 line-clamp-2">
+                                        <strong>Hallazgo:</strong> {photoItem.finding}
+                                      </p>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         );
                       })()}
