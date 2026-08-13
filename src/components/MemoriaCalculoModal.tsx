@@ -252,8 +252,8 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
 
         // Definición de anchos de columna optimizados
         ws.columns = [
-          { key: 'col1', width: 15 }, // ITEM / Etiqueta
-          { key: 'col2', width: 52 }, // DESCRIPCION / Tipo
+          { key: 'col1', width: 16 }, // ITEM / Etiqueta
+          { key: 'col2', width: 54 }, // DESCRIPCION / Tipo
           { key: 'col3', width: 14 }, // UNID / Estado
           { key: 'col4', width: 24 }, // CANTIDAD PRESUPUESTO / Avance
           { key: 'col5', width: 24 }, // CANTIDAD EJECUTADA / Cantidad Aportada
@@ -403,9 +403,8 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
           };
         }
 
-        // --- FILAS 7 A 17: CONTENEDORES CON MARCO PARA IMÁGENES ---
-        // 11 filas x 24pt = 264pt de altura para proporción panorámica idéntica al visor
-        for (let r = 7; r <= 17; r++) {
+        // --- FILAS 7 A 19: CONTENEDORES CON MARCO PARA IMÁGENES (312pt altura) ---
+        for (let r = 7; r <= 19; r++) {
           const rObj = ws.getRow(r);
           rObj.height = 24;
           for (let col = 1; col <= 5; col++) {
@@ -413,30 +412,95 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: col <= 2 ? '0B1329' : 'F8FAFC' } };
             cell.border = {
               top: r === 7 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
-              bottom: r === 17 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
+              bottom: r === 19 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
               left: col === 1 || col === 3 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
               right: col === 2 || col === 5 ? { style: 'medium', color: { argb: '0F172A' } } : undefined
             };
           }
         }
-        ws.mergeCells('A7:B17');
-        ws.mergeCells('C7:E17');
+        ws.mergeCells('A7:B19');
+        ws.mergeCells('C7:E19');
 
-        // Capturar plano y fotos en alta resolución (2x pixelRatio)
+        // Helper para insertar imágenes proporcionales sin deformación en Excel
+        const addProportionalImageToExcel = async (
+          imgBase64: string,
+          startCol: number,
+          endCol: number,
+          startRow: number,
+          endRow: number,
+          colWidths: number[],
+          rowHeights: number[]
+        ) => {
+          try {
+            const imageId = wb.addImage({
+              base64: imgBase64,
+              extension: 'png',
+            });
+
+            const dims = await new Promise<{ width: number; height: number }>((resolve) => {
+              const img = new Image();
+              img.onload = () => resolve({ width: img.naturalWidth || img.width || 800, height: img.naturalHeight || img.height || 500 });
+              img.onerror = () => resolve({ width: 800, height: 500 });
+              img.src = imgBase64;
+            });
+
+            // Convertir anchos de columna y alturas de fila a píxeles equivalentes
+            const totalContainerWidthPx = colWidths.reduce((sum, w) => sum + w * 7.5, 0);
+            const totalContainerHeightPx = rowHeights.reduce((sum, h) => sum + h * 1.333, 0);
+
+            const imgAspect = dims.width / dims.height;
+            const containerAspect = totalContainerWidthPx / totalContainerHeightPx;
+
+            const totalCols = endCol - startCol;
+            const totalRows = endRow - startRow;
+
+            // Margen interior de seguridad para preservar los bordes nítidos
+            const paddingRatio = 0.015;
+            let actualColSpan = totalCols * (1 - paddingRatio * 2);
+            let actualRowSpan = totalRows * (1 - paddingRatio * 2);
+
+            if (imgAspect > containerAspect) {
+              actualColSpan = totalCols * (1 - paddingRatio * 2);
+              const targetHeightPx = (totalContainerWidthPx * (1 - paddingRatio * 2)) / imgAspect;
+              const heightFraction = targetHeightPx / totalContainerHeightPx;
+              actualRowSpan = totalRows * Math.min(heightFraction, 1 - paddingRatio * 2);
+            } else {
+              actualRowSpan = totalRows * (1 - paddingRatio * 2);
+              const targetWidthPx = (totalContainerHeightPx * (1 - paddingRatio * 2)) * imgAspect;
+              const widthFraction = targetWidthPx / totalContainerWidthPx;
+              actualColSpan = totalCols * Math.min(widthFraction, 1 - paddingRatio * 2);
+            }
+
+            // Centrado horizontal y vertical exacto dentro del contenedor
+            const tlCol = startCol + (totalCols - actualColSpan) / 2;
+            const tlRow = startRow + (totalRows - actualRowSpan) / 2;
+
+            ws.addImage(imageId, {
+              tl: { col: tlCol, row: tlRow },
+              br: { col: tlCol + actualColSpan, row: tlRow + actualRowSpan },
+              editAs: 'oneCell'
+            } as any);
+          } catch(e) {
+            console.error("Error adding proportional image to Excel", e);
+          }
+        };
+
+        const visualRowHeights = new Array(13).fill(24);
+
+        // Capturar plano en alta resolución y ubicar sin deformación
         const mapEl = document.getElementById(`map-capture-${itemGroup.itemNo}`);
         if (mapEl) {
           try {
             const mapBase64 = await toPng(mapEl, { pixelRatio: 2, cacheBust: true });
-            const imageId1 = wb.addImage({
-              base64: mapBase64,
-              extension: 'png',
-            });
-            // Con margen interior (0.02 col, 0.08 row) para preservar el marco perimetral
-            ws.addImage(imageId1, {
-              tl: { col: 0.02, row: 6.08 },
-              br: { col: 1.98, row: 16.92 },
-              editAs: 'oneCell'
-            } as any);
+            await addProportionalImageToExcel(
+              mapBase64,
+              0, // Col A
+              2, // Col B derecha
+              6, // Fila 7
+              19, // Fila 19
+              [16, 54],
+              visualRowHeights
+            );
           } catch(e) { console.error("Error capturing map", e); }
         }
 
@@ -444,29 +508,28 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
         if (photoEl) {
           try {
             const photoBase64 = await toPng(photoEl, { pixelRatio: 2, cacheBust: true });
-            const imageId2 = wb.addImage({
-              base64: photoBase64,
-              extension: 'png',
-            });
-            // Con margen interior para fotos proporcionales
-            ws.addImage(imageId2, {
-              tl: { col: 2.02, row: 6.08 },
-              br: { col: 4.98, row: 16.92 },
-              editAs: 'oneCell'
-            } as any);
+            await addProportionalImageToExcel(
+              photoBase64,
+              2, // Col C
+              5, // Col E derecha
+              6, // Fila 7
+              19, // Fila 19
+              [14, 24, 24],
+              visualRowHeights
+            );
           } catch(e) { console.error("Error capturing photos", e); }
         }
 
-        // --- FILA 18: ESPACIADOR ---
-        ws.getRow(18).height = 6;
+        // --- FILA 20: ESPACIADOR ---
+        ws.getRow(20).height = 6;
 
-        // --- FILA 19: ENCABEZADO DE OBSERVACIONES ---
-        const row19 = ws.getRow(19);
-        row19.height = 22;
-        row19.values = ["OBSERVACIONES:", "", "", "", ""];
-        ws.mergeCells('A19:E19');
+        // --- FILA 21: ENCABEZADO DE OBSERVACIONES ---
+        const row21 = ws.getRow(21);
+        row21.height = 22;
+        row21.values = ["OBSERVACIONES:", "", "", "", ""];
+        ws.mergeCells('A21:E21');
         for (let col = 1; col <= 5; col++) {
-          const cell = row19.getCell(col);
+          const cell = row21.getCell(col);
           cell.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: 'FFFFFF' } };
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '334155' } };
           cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
@@ -478,10 +541,10 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
           };
         }
 
-        // --- FILAS 20 A 22: RECUADRO DE TEXTO DE OBSERVACIONES ---
+        // --- FILAS 22 A 24: RECUADRO DE TEXTO DE OBSERVACIONES ---
         const noteKey = `${selectedActa}_${itemGroup.itemNo}`;
         const noteVal = sheetNotes[noteKey] || '';
-        for (let r = 20; r <= 22; r++) {
+        for (let r = 22; r <= 24; r++) {
           const rObj = ws.getRow(r);
           rObj.height = 18;
           for (let col = 1; col <= 5; col++) {
@@ -490,26 +553,26 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
             cell.border = {
               left: col === 1 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
               right: col === 5 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
-              bottom: r === 22 ? { style: 'medium', color: { argb: '0F172A' } } : undefined
+              bottom: r === 24 ? { style: 'medium', color: { argb: '0F172A' } } : undefined
             };
           }
         }
-        ws.mergeCells('A20:E22');
-        const noteCell = ws.getCell('A20');
+        ws.mergeCells('A22:E24');
+        const noteCell = ws.getCell('A22');
         noteCell.value = noteVal || 'Sin observaciones técnicas adicionales registradas para este ítem en el acta actual.';
         noteCell.font = { name: 'Calibri', size: 9.5, italic: !noteVal, color: { argb: noteVal ? '0F172A' : '64748B' } };
         noteCell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
 
-        // --- FILA 23: ESPACIADOR ---
-        ws.getRow(23).height = 6;
+        // --- FILA 25: ESPACIADOR ---
+        ws.getRow(25).height = 6;
 
-        // --- FILA 24: TÍTULO DE LA TABLA DETALLADA ---
-        const row24 = ws.getRow(24);
-        row24.height = 24;
-        row24.values = ["DETALLE DE ELEMENTOS (MEMORIA DE CÁLCULO)", "", "", "", ""];
-        ws.mergeCells('A24:E24');
+        // --- FILA 26: TÍTULO DE LA TABLA DETALLADA ---
+        const row26 = ws.getRow(26);
+        row26.height = 24;
+        row26.values = ["DETALLE DE ELEMENTOS (MEMORIA DE CÁLCULO)", "", "", "", ""];
+        ws.mergeCells('A26:E26');
         for (let col = 1; col <= 5; col++) {
-          const cell = row24.getCell(col);
+          const cell = row26.getCell(col);
           cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFF' } };
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1E293B' } };
           cell.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -521,12 +584,12 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
           };
         }
 
-        // --- FILA 25: ENCABEZADOS DE COLUMNAS DE LA TABLA ---
-        const row25 = ws.getRow(25);
-        row25.height = 22;
-        row25.values = ["Etiqueta", "Tipo", "Estado", "Avance", "Cantidad Aportada"];
+        // --- FILA 27: ENCABEZADOS DE COLUMNAS DE LA TABLA ---
+        const row27 = ws.getRow(27);
+        row27.height = 22;
+        row27.values = ["Etiqueta", "Tipo", "Estado", "Avance", "Cantidad Aportada"];
         for (let col = 1; col <= 5; col++) {
-          const cell = row25.getCell(col);
+          const cell = row27.getCell(col);
           cell.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: 'FFFFFF' } };
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '475569' } };
           cell.alignment = {
@@ -541,8 +604,8 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
           };
         }
 
-        // --- FILAS 26+: REGISTROS DETALLADOS DE ELEMENTOS ---
-        let currentRowIdx = 26;
+        // --- FILAS 28+: REGISTROS DETALLADOS DE ELEMENTOS ---
+        let currentRowIdx = 28;
         let totalSumAportada = 0;
 
         filteredElements.forEach((el, elemIdx) => {
@@ -1923,7 +1986,7 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
                       </div>
 
                       {/* Canvas/Elements Graphic representation */}
-                      <div id={`map-capture-${itemGroup.itemNo}`} className="relative bg-slate-900 rounded-lg border border-slate-800 p-4 min-h-[300px] flex flex-col justify-between text-white overflow-hidden flex-1">
+                      <div id={`map-capture-${itemGroup.itemNo}`} className="relative bg-slate-900 rounded-lg border border-slate-800 p-4 min-h-[340px] flex flex-col justify-between text-white overflow-hidden flex-1">
                         <MemoriaCanvasMiniature blueprintImg={blueprintImg} elements={filteredElements} />
                         {/* Sub-elements list tags */}
                         <div className="flex flex-wrap gap-2 z-10">
