@@ -491,7 +491,7 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
         const mapEl = document.getElementById(`map-capture-${itemGroup.itemNo}`);
         if (mapEl) {
           try {
-            const mapBase64 = await toPng(mapEl, { pixelRatio: 2, cacheBust: true });
+            const mapBase64 = await toPng(mapEl, { pixelRatio: 3, cacheBust: true });
             await addProportionalImageToExcel(
               mapBase64,
               0, // Col A
@@ -507,7 +507,7 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
         const photoEl = document.getElementById(`photo-capture-${itemGroup.itemNo}`);
         if (photoEl) {
           try {
-            const photoBase64 = await toPng(photoEl, { pixelRatio: 2, cacheBust: true });
+            const photoBase64 = await toPng(photoEl, { pixelRatio: 3, cacheBust: true });
             await addProportionalImageToExcel(
               photoBase64,
               2, // Col C
