@@ -642,6 +642,61 @@ export default function App() {
     }
   };
 
+  // Verificar Integridad de Vínculos entre Bitácora y Cronograma
+  const verificarIntegridadVinculos = useCallback(() => {
+    let vinculadosCount = 0;
+    let huerfanosCount = 0;
+    let conflictosCount = 0;
+
+    const validScheduleIds = new Set<string>();
+    scheduleItems.forEach(item => {
+      if (item.id) validScheduleIds.add(item.id.trim().toUpperCase());
+      if (item.code) validScheduleIds.add(item.code.trim().toUpperCase());
+    });
+
+    elements.forEach(el => {
+      if (!el.scheduleItemId || el.scheduleItemId.trim() === '') {
+        huerfanosCount++;
+      } else {
+        const rawCode = el.scheduleItemId.trim().toUpperCase();
+        if (validScheduleIds.has(rawCode)) {
+          vinculadosCount++;
+        } else {
+          conflictosCount++;
+        }
+      }
+    });
+
+    const severity: 'success' | 'warning' | 'info' = 
+      conflictosCount > 0 ? 'warning' : (huerfanosCount > 0 ? 'info' : 'success');
+
+    const msg = `Verificación de Integridad de Vínculos: ${vinculadosCount} vinculado(s) correctamente, ${huerfanosCount} huérfano(s) (sin ID crono), ${conflictosCount} conflicto(s) de ID.`;
+
+    const newLog: ActivityLog = {
+      id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      timestamp: new Date().toLocaleTimeString(),
+      message: msg,
+      type: 'telemetry_alert',
+      severity
+    };
+
+    setActivityLogs(logs => [newLog, ...logs.slice(0, 29)]);
+    showToast(msg);
+
+    supabaseAudit.logEvent({
+      userEmail: currentUser?.email || 'sistema@obra.com',
+      userName: currentUser?.fullName || currentUser?.email || 'Sistema de Control',
+      userRole: currentUser?.role || 'admin',
+      actionType: 'update',
+      entityType: 'config',
+      entityId: 'verificacion_vinculos',
+      entityName: 'Verificación de Integridad de Vínculos',
+      details: msg
+    });
+
+    return { vinculadosCount, huerfanosCount, conflictosCount, total: elements.length };
+  }, [elements, scheduleItems, currentUser, showToast]);
+
 
 
   const handleEraseAt = (point: Point) => {
@@ -1579,6 +1634,7 @@ export default function App() {
         currentUser={currentUser}
         showToast={showToast}
         initialTab={scheduleInitialTab}
+        onVerificarIntegridad={verificarIntegridadVinculos}
       />
 
       {/* Memoria de Cálculo del Acta de Cobro Modal */}

@@ -45,6 +45,7 @@ interface ScheduleProgressModalProps {
   currentUser: AuthUser | null;
   showToast: (msg: string) => void;
   initialTab?: 'matrix' | 'bySector' | 'byElement' | 'manage' | 'import';
+  onVerificarIntegridad?: () => { vinculadosCount: number; huerfanosCount: number; conflictosCount: number };
 }
 
 export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
@@ -57,7 +58,8 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
   areas,
   currentUser,
   showToast,
-  initialTab = 'matrix'
+  initialTab = 'matrix',
+  onVerificarIntegridad
 }) => {
   const [activeTab, setActiveTab] = useState<'matrix' | 'bySector' | 'byElement' | 'manage' | 'import'>(initialTab);
 
@@ -218,6 +220,9 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
     });
 
     showToast(`¡Se vincularon ${updatedCount} elementos de la bitácora con los rubros del cronograma!`);
+    if (onVerificarIntegridad) {
+      onVerificarIntegridad();
+    }
   };
 
   // Form for adding / editing schedule item
@@ -1005,6 +1010,17 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
               <Zap className="w-3.5 h-3.5 text-amber-400" />
               <span>Auto-Vincular por ID/Norma</span>
             </button>
+
+            {onVerificarIntegridad && (
+              <button
+                onClick={() => onVerificarIntegridad()}
+                className="px-3 py-1.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1.5"
+                title="Verificar cuántos elementos están vinculados, huérfanos o en conflicto de ID"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Verificar Integridad</span>
+              </button>
+            )}
           </div>
         </div>
 
