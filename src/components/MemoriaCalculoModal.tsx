@@ -200,13 +200,30 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
   const handleExportMemoriasExcel = async () => {
     try {
       const wb = new ExcelJS.Workbook();
+      wb.creator = 'Sistema de Control de Obras y Telecomunicaciones';
+      wb.lastModifiedBy = projectMeta.inspectorName || 'Inspector de Obra';
+      wb.created = new Date();
 
       if (displayedItems.length === 0) {
         alert("No hay ítems para exportar.");
         return;
       }
 
-      if (showToast) showToast('Generando Excel con imágenes... Esto puede tardar un momento.');
+      if (showToast) showToast('Generando Excel con formatos ejecutivos e imágenes... Esto puede tardar un momento.');
+
+      const thinBorderDef: Partial<ExcelJS.Borders> = {
+        top: { style: 'thin', color: { argb: 'CBD5E1' } },
+        left: { style: 'thin', color: { argb: 'CBD5E1' } },
+        bottom: { style: 'thin', color: { argb: 'CBD5E1' } },
+        right: { style: 'thin', color: { argb: 'CBD5E1' } }
+      };
+
+      const darkMediumBorderDef: Partial<ExcelJS.Borders> = {
+        top: { style: 'medium', color: { argb: '0F172A' } },
+        left: { style: 'medium', color: { argb: '0F172A' } },
+        bottom: { style: 'medium', color: { argb: '0F172A' } },
+        right: { style: 'medium', color: { argb: '0F172A' } }
+      };
 
       for (let idx = 0; idx < displayedItems.length; idx++) {
         const itemGroup = displayedItems[idx];
@@ -228,114 +245,307 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
            counter++;
         }
         
-        const ws = wb.addWorksheet(finalSheetName);
+        const ws = wb.addWorksheet(finalSheetName, {
+          views: [{ showGridLines: true }],
+          pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
+        });
 
-        // Define columns
+        // Definición de anchos de columna optimizados
         ws.columns = [
-          { width: 18 }, // ITEM / PROYECTO / UBICACION / Etiqueta
-          { width: 45 }, // DESCRIPCION / ... / Tipo
-          { width: 18 }, // UNID / CONTRATISTA / REGISTRO / Estado
-          { width: 25 }, // CANTIDAD PRESUPUESTO / Avance
-          { width: 25 }, // CANTIDAD EJECUTADA / ACTA / Cantidad Aportada
+          { key: 'col1', width: 15 }, // ITEM / Etiqueta
+          { key: 'col2', width: 52 }, // DESCRIPCION / Tipo
+          { key: 'col3', width: 14 }, // UNID / Estado
+          { key: 'col4', width: 24 }, // CANTIDAD PRESUPUESTO / Avance
+          { key: 'col5', width: 24 }, // CANTIDAD EJECUTADA / Cantidad Aportada
         ];
 
-        // Row 1
-        ws.addRow(["ITEM", "DESCRIPCIÓN", "UNID", "CANTIDAD PRESUPUESTO", "CANTIDAD EJECUTADA"]);
-        // Row 2
-        ws.addRow([
+        // --- FILA 1: ENCABEZADO PRINCIPAL DE LA MEMORIA ---
+        const row1 = ws.getRow(1);
+        row1.height = 26;
+        row1.values = ["ITEM", "DESCRIPCIÓN", "UNIDAD", "CANTIDAD PRESUPUESTO", "CANTIDAD EJECUTADA"];
+        for (let col = 1; col <= 5; col++) {
+          const cell = row1.getCell(col);
+          cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1E293B' } };
+          cell.alignment = {
+            vertical: 'middle',
+            horizontal: col === 1 || col === 3 ? 'center' : (col >= 4 ? 'right' : 'left')
+          };
+          cell.border = {
+            top: { style: 'medium', color: { argb: '0F172A' } },
+            left: { style: col === 1 ? 'medium' : 'thin', color: { argb: col === 1 ? '0F172A' : '475569' } },
+            right: { style: col === 5 ? 'medium' : 'thin', color: { argb: col === 5 ? '0F172A' : '475569' } },
+            bottom: { style: 'thin', color: { argb: '0F172A' } }
+          };
+        }
+
+        // --- FILA 2: DATOS DEL ÍTEM DE COBRO ---
+        const row2 = ws.getRow(2);
+        row2.height = 46;
+        row2.values = [
           itemGroup.itemNo,
-          itemGroup.description,
-          itemGroup.unit,
+          itemGroup.description.toUpperCase(),
+          itemGroup.unit || 'UN',
           itemGroup.budgetQty,
           parseFloat(itemGroup.executedQty.toFixed(2))
-        ]);
+        ];
 
-        // Row 3 empty
-        ws.addRow([]);
+        // Fila 2 Estilos celda a celda
+        const cellA2 = row2.getCell(1);
+        cellA2.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '0F172A' } };
+        cellA2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8FAFC' } };
+        cellA2.alignment = { vertical: 'middle', horizontal: 'center' };
+        cellA2.border = {
+          left: { style: 'medium', color: { argb: '0F172A' } },
+          right: { style: 'thin', color: { argb: 'CBD5E1' } },
+          bottom: { style: 'medium', color: { argb: '0F172A' } }
+        };
 
-        // Row 4
-        ws.addRow([
-          `PROYECTO: ${projectMeta.sectorLocation || ''}`,
+        const cellB2 = row2.getCell(2);
+        cellB2.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: '0F172A' } };
+        cellB2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF' } };
+        cellB2.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+        cellB2.border = {
+          left: { style: 'thin', color: { argb: 'CBD5E1' } },
+          right: { style: 'thin', color: { argb: 'CBD5E1' } },
+          bottom: { style: 'medium', color: { argb: '0F172A' } }
+        };
+
+        const cellC2 = row2.getCell(3);
+        cellC2.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '334155' } };
+        cellC2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8FAFC' } };
+        cellC2.alignment = { vertical: 'middle', horizontal: 'center' };
+        cellC2.border = {
+          left: { style: 'thin', color: { argb: 'CBD5E1' } },
+          right: { style: 'thin', color: { argb: 'CBD5E1' } },
+          bottom: { style: 'medium', color: { argb: '0F172A' } }
+        };
+
+        const cellD2 = row2.getCell(4);
+        cellD2.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '0F172A' } };
+        cellD2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8FAFC' } };
+        cellD2.alignment = { vertical: 'middle', horizontal: 'right' };
+        cellD2.numFmt = '#,##0.00';
+        cellD2.border = {
+          left: { style: 'thin', color: { argb: 'CBD5E1' } },
+          right: { style: 'thin', color: { argb: 'CBD5E1' } },
+          bottom: { style: 'medium', color: { argb: '0F172A' } }
+        };
+
+        const cellE2 = row2.getCell(5);
+        cellE2.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '047857' } };
+        cellE2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'ECFDF5' } };
+        cellE2.alignment = { vertical: 'middle', horizontal: 'right' };
+        cellE2.numFmt = '#,##0.00';
+        cellE2.border = {
+          left: { style: 'thin', color: { argb: 'CBD5E1' } },
+          right: { style: 'medium', color: { argb: '0F172A' } },
+          bottom: { style: 'medium', color: { argb: '0F172A' } }
+        };
+
+        // --- FILA 3: ESPACIADOR ---
+        ws.getRow(3).height = 6;
+
+        // --- FILA 4: RECUADRO INFORMATIVO DEL PROYECTO ---
+        const row4 = ws.getRow(4);
+        row4.height = 24;
+        row4.values = [
+          `PROYECTO: ${projectMeta.sectorLocation || 'Obra Eléctrica / Telecomunicaciones'}`,
           "",
-          `CONTRATISTA: ${projectMeta.contractorName || ''}`,
+          `CONTRATISTA: ${projectMeta.contractorName || 'Contratista General'}`,
           "",
           `ACTA: ${selectedActa}`
-        ]);
+        ];
         ws.mergeCells('A4:B4');
         ws.mergeCells('C4:D4');
 
-        // Row 5 empty
-        ws.addRow([]);
+        for (let c = 1; c <= 5; c++) {
+          const cell = row4.getCell(c);
+          cell.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: '1E293B' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F1F5F9' } };
+          cell.alignment = { vertical: 'middle', horizontal: c === 5 ? 'center' : 'left' };
+          cell.border = {
+            top: { style: 'thin', color: { argb: '94A3B8' } },
+            bottom: { style: 'thin', color: { argb: '94A3B8' } },
+            left: { style: c === 1 ? 'medium' : 'thin', color: { argb: c === 1 ? '0F172A' : 'CBD5E1' } },
+            right: { style: c === 5 ? 'medium' : 'thin', color: { argb: c === 5 ? '0F172A' : 'CBD5E1' } }
+          };
+        }
+        row4.getCell(5).font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: '065F46' } };
+        row4.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'ECFDF5' } };
 
-        // Row 6
-        ws.addRow(["UBICACIÓN EN PLANO DE OBRA", "", "REGISTRO Y EVIDENCIA FOTOGRÁFICA EN CAMPO", "", ""]);
+        // --- FILA 5: ESPACIADOR ---
+        ws.getRow(5).height = 6;
+
+        // --- FILA 6: ENCABEZADOS DE RECUADROS VISUALES (PLANO Y REGISTRO FOTOGRÁFICO) ---
+        const row6 = ws.getRow(6);
+        row6.height = 24;
+        row6.values = [
+          "UBICACIÓN EN PLANO DE OBRA",
+          "",
+          "REGISTRO Y EVIDENCIA FOTOGRÁFICA EN CAMPO",
+          "",
+          ""
+        ];
         ws.mergeCells('A6:B6');
         ws.mergeCells('C6:E6');
 
-        // Row 7 to 16 for Images
-        for(let i=0; i<10; i++) ws.addRow(["", "", "", "", ""]);
-        ws.mergeCells('A7:B16');
-        ws.mergeCells('C7:E16');
+        for (let col = 1; col <= 5; col++) {
+          const cell = row6.getCell(col);
+          cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1E293B' } };
+          cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+          cell.border = {
+            top: { style: 'medium', color: { argb: '0F172A' } },
+            left: { style: col === 1 || col === 3 ? 'medium' : 'thin', color: { argb: '0F172A' } },
+            right: { style: col === 2 || col === 5 ? 'medium' : 'thin', color: { argb: '0F172A' } },
+            bottom: { style: 'medium', color: { argb: '0F172A' } }
+          };
+        }
 
-        // Render maps & photos to canvas
+        // --- FILAS 7 A 17: CONTENEDORES CON MARCO PARA IMÁGENES ---
+        // 11 filas x 24pt = 264pt de altura para proporción panorámica idéntica al visor
+        for (let r = 7; r <= 17; r++) {
+          const rObj = ws.getRow(r);
+          rObj.height = 24;
+          for (let col = 1; col <= 5; col++) {
+            const cell = rObj.getCell(col);
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: col <= 2 ? '0B1329' : 'F8FAFC' } };
+            cell.border = {
+              top: r === 7 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
+              bottom: r === 17 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
+              left: col === 1 || col === 3 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
+              right: col === 2 || col === 5 ? { style: 'medium', color: { argb: '0F172A' } } : undefined
+            };
+          }
+        }
+        ws.mergeCells('A7:B17');
+        ws.mergeCells('C7:E17');
+
+        // Capturar plano y fotos en alta resolución (2x pixelRatio)
         const mapEl = document.getElementById(`map-capture-${itemGroup.itemNo}`);
         if (mapEl) {
           try {
-            const mapBase64 = await toPng(mapEl, { pixelRatio: 1.5 });
+            const mapBase64 = await toPng(mapEl, { pixelRatio: 2, cacheBust: true });
             const imageId1 = wb.addImage({
               base64: mapBase64,
               extension: 'png',
             });
+            // Con margen interior (0.02 col, 0.08 row) para preservar el marco perimetral
             ws.addImage(imageId1, {
-              tl: { col: 0, row: 6 },
-              br: { col: 2, row: 16 },
+              tl: { col: 0.02, row: 6.08 },
+              br: { col: 1.98, row: 16.92 },
               editAs: 'oneCell'
-              } as any);
+            } as any);
           } catch(e) { console.error("Error capturing map", e); }
         }
 
         const photoEl = document.getElementById(`photo-capture-${itemGroup.itemNo}`);
         if (photoEl) {
           try {
-            const photoBase64 = await toPng(photoEl, { pixelRatio: 1.5 });
+            const photoBase64 = await toPng(photoEl, { pixelRatio: 2, cacheBust: true });
             const imageId2 = wb.addImage({
               base64: photoBase64,
               extension: 'png',
             });
+            // Con margen interior para fotos proporcionales
             ws.addImage(imageId2, {
-              tl: { col: 2, row: 6 },
-              br: { col: 5, row: 16 },
+              tl: { col: 2.02, row: 6.08 },
+              br: { col: 4.98, row: 16.92 },
               editAs: 'oneCell'
-              } as any);
+            } as any);
           } catch(e) { console.error("Error capturing photos", e); }
         }
 
-        // Row 17 empty
-        ws.addRow([]);
+        // --- FILA 18: ESPACIADOR ---
+        ws.getRow(18).height = 6;
 
-        // Row 18
-        ws.addRow(["OBSERVACIONES:"]);
-        ws.mergeCells('A18:E18');
+        // --- FILA 19: ENCABEZADO DE OBSERVACIONES ---
+        const row19 = ws.getRow(19);
+        row19.height = 22;
+        row19.values = ["OBSERVACIONES:", "", "", "", ""];
+        ws.mergeCells('A19:E19');
+        for (let col = 1; col <= 5; col++) {
+          const cell = row19.getCell(col);
+          cell.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: 'FFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '334155' } };
+          cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+          cell.border = {
+            top: { style: 'medium', color: { argb: '0F172A' } },
+            left: { style: col === 1 ? 'medium' : 'thin', color: { argb: '0F172A' } },
+            right: { style: col === 5 ? 'medium' : 'thin', color: { argb: '0F172A' } },
+            bottom: { style: 'thin', color: { argb: '0F172A' } }
+          };
+        }
 
-        // Row 19-21
+        // --- FILAS 20 A 22: RECUADRO DE TEXTO DE OBSERVACIONES ---
         const noteKey = `${selectedActa}_${itemGroup.itemNo}`;
         const noteVal = sheetNotes[noteKey] || '';
-        ws.addRow([noteVal, "", "", "", ""]);
-        ws.addRow(["", "", "", "", ""]);
-        ws.addRow(["", "", "", "", ""]);
-        ws.mergeCells('A19:E21');
+        for (let r = 20; r <= 22; r++) {
+          const rObj = ws.getRow(r);
+          rObj.height = 18;
+          for (let col = 1; col <= 5; col++) {
+            const cell = rObj.getCell(col);
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FAFAFA' } };
+            cell.border = {
+              left: col === 1 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
+              right: col === 5 ? { style: 'medium', color: { argb: '0F172A' } } : undefined,
+              bottom: r === 22 ? { style: 'medium', color: { argb: '0F172A' } } : undefined
+            };
+          }
+        }
+        ws.mergeCells('A20:E22');
+        const noteCell = ws.getCell('A20');
+        noteCell.value = noteVal || 'Sin observaciones técnicas adicionales registradas para este ítem en el acta actual.';
+        noteCell.font = { name: 'Calibri', size: 9.5, italic: !noteVal, color: { argb: noteVal ? '0F172A' : '64748B' } };
+        noteCell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
 
-        // Row 22 empty
-        ws.addRow([]);
+        // --- FILA 23: ESPACIADOR ---
+        ws.getRow(23).height = 6;
 
-        // Row 23
-        ws.addRow(["DETALLE DE ELEMENTOS (MEMORIA DE CÁLCULO)", "", "", "", ""]);
-        ws.mergeCells('A23:E23');
+        // --- FILA 24: TÍTULO DE LA TABLA DETALLADA ---
+        const row24 = ws.getRow(24);
+        row24.height = 24;
+        row24.values = ["DETALLE DE ELEMENTOS (MEMORIA DE CÁLCULO)", "", "", "", ""];
+        ws.mergeCells('A24:E24');
+        for (let col = 1; col <= 5; col++) {
+          const cell = row24.getCell(col);
+          cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1E293B' } };
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          cell.border = {
+            top: { style: 'medium', color: { argb: '0F172A' } },
+            left: { style: col === 1 ? 'medium' : 'thin', color: { argb: '0F172A' } },
+            right: { style: col === 5 ? 'medium' : 'thin', color: { argb: '0F172A' } },
+            bottom: { style: 'thin', color: { argb: '475569' } }
+          };
+        }
 
-        // Row 24
-        ws.addRow(["Etiqueta", "Tipo", "Estado", "Avance", "Cantidad Aportada"]);
+        // --- FILA 25: ENCABEZADOS DE COLUMNAS DE LA TABLA ---
+        const row25 = ws.getRow(25);
+        row25.height = 22;
+        row25.values = ["Etiqueta", "Tipo", "Estado", "Avance", "Cantidad Aportada"];
+        for (let col = 1; col <= 5; col++) {
+          const cell = row25.getCell(col);
+          cell.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: 'FFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '475569' } };
+          cell.alignment = {
+            vertical: 'middle',
+            horizontal: col === 1 || col === 3 || col === 4 ? 'center' : (col === 5 ? 'right' : 'left')
+          };
+          cell.border = {
+            top: { style: 'thin', color: { argb: '475569' } },
+            left: { style: col === 1 ? 'medium' : 'thin', color: { argb: col === 1 ? '0F172A' : '64748B' } },
+            right: { style: col === 5 ? 'medium' : 'thin', color: { argb: col === 5 ? '0F172A' : '64748B' } },
+            bottom: { style: 'medium', color: { argb: '0F172A' } }
+          };
+        }
 
-        filteredElements.forEach(el => {
+        // --- FILAS 26+: REGISTROS DETALLADOS DE ELEMENTOS ---
+        let currentRowIdx = 26;
+        let totalSumAportada = 0;
+
+        filteredElements.forEach((el, elemIdx) => {
           let baseQty = el.type === 'line' ? (el.meters || 1) : 1;
           let aportada = 0;
           if (el.status === 'Terminado') {
@@ -348,23 +558,161 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
              aportada = baseQty;
           }
 
-          ws.addRow([
+          totalSumAportada += aportada;
+
+          const dRow = ws.getRow(currentRowIdx);
+          dRow.height = 20;
+          dRow.values = [
             el.label,
-            el.type === 'line' ? 'Canalización' : (el.camType || 'Cámara'),
+            el.camType || el.pipes || (el.type === 'line' ? 'Canalización' : 'Cámara'),
             el.status,
-            el.status === 'En proceso' && el.progressPercent !== undefined ? `${el.progressPercent}%` : (el.status === 'Terminado' ? '100%' : 'N/A'),
+            el.status === 'En proceso' && el.progressPercent !== undefined ? `${el.progressPercent}%` : (el.status === 'Terminado' ? '100%' : '100%'),
             parseFloat(aportada.toFixed(2))
-          ]);
+          ];
+
+          const isEven = elemIdx % 2 === 0;
+          const rowBg = isEven ? 'FFFFFF' : 'F8FAFC';
+
+          // Celda A: Etiqueta
+          const c1 = dRow.getCell(1);
+          c1.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: '0F172A' } };
+          c1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+          c1.alignment = { vertical: 'middle', horizontal: 'center' };
+          c1.border = {
+            left: { style: 'medium', color: { argb: '0F172A' } },
+            right: { style: 'thin', color: { argb: 'E2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'E2E8F0' } }
+          };
+
+          // Celda B: Tipo
+          const c2 = dRow.getCell(2);
+          c2.font = { name: 'Calibri', size: 9.5, color: { argb: '334155' } };
+          c2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+          c2.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+          c2.border = {
+            left: { style: 'thin', color: { argb: 'E2E8F0' } },
+            right: { style: 'thin', color: { argb: 'E2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'E2E8F0' } }
+          };
+
+          // Celda C: Estado
+          const c3 = dRow.getCell(3);
+          const isFinished = el.status === 'Terminado';
+          const isInProg = el.status === 'En proceso';
+          c3.font = {
+            name: 'Calibri',
+            size: 9,
+            bold: true,
+            color: { argb: isFinished ? '065F46' : (isInProg ? '92400E' : '475569') }
+          };
+          c3.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: isFinished ? 'ECFDF5' : (isInProg ? 'FEF3C7' : rowBg) }
+          };
+          c3.alignment = { vertical: 'middle', horizontal: 'center' };
+          c3.border = {
+            left: { style: 'thin', color: { argb: 'E2E8F0' } },
+            right: { style: 'thin', color: { argb: 'E2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'E2E8F0' } }
+          };
+
+          // Celda D: Avance
+          const c4 = dRow.getCell(4);
+          c4.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: '0F172A' } };
+          c4.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+          c4.alignment = { vertical: 'middle', horizontal: 'center' };
+          c4.border = {
+            left: { style: 'thin', color: { argb: 'E2E8F0' } },
+            right: { style: 'thin', color: { argb: 'E2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'E2E8F0' } }
+          };
+
+          // Celda E: Cantidad Aportada
+          const c5 = dRow.getCell(5);
+          c5.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '047857' } };
+          c5.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+          c5.alignment = { vertical: 'middle', horizontal: 'right' };
+          c5.numFmt = '#,##0.00';
+          c5.border = {
+            left: { style: 'thin', color: { argb: 'E2E8F0' } },
+            right: { style: 'medium', color: { argb: '0F172A' } },
+            bottom: { style: 'thin', color: { argb: 'E2E8F0' } }
+          };
+
+          currentRowIdx++;
         });
-        
-        // Format numbers to 2 decimal places
-        ws.eachRow((row, rowNumber) => {
-          row.eachCell((cell, colNumber) => {
-            if (typeof cell.value === 'number' && colNumber >= 3) {
-              cell.numFmt = '#,##0.00';
-            }
-          });
-        });
+
+        // --- FILA DE TOTALES CON DOBLE LÍNEA ---
+        const totalRow = ws.getRow(currentRowIdx);
+        totalRow.height = 24;
+        totalRow.values = ["TOTAL APORTADO AL ÍTEM:", "", "", "", parseFloat(totalSumAportada.toFixed(2))];
+        ws.mergeCells(`A${currentRowIdx}:D${currentRowIdx}`);
+
+        for (let col = 1; col <= 4; col++) {
+          const cell = totalRow.getCell(col);
+          cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '065F46' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'ECFDF5' } };
+          cell.alignment = { vertical: 'middle', horizontal: 'right' };
+          cell.border = {
+            top: { style: 'medium', color: { argb: '047857' } },
+            bottom: { style: 'double', color: { argb: '047857' } },
+            left: { style: col === 1 ? 'medium' : 'thin', color: { argb: col === 1 ? '0F172A' : 'CBD5E1' } },
+            right: { style: 'thin', color: { argb: 'CBD5E1' } }
+          };
+        }
+
+        const totValCell = totalRow.getCell(5);
+        totValCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: '047857' } };
+        totValCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D1FAE5' } };
+        totValCell.alignment = { vertical: 'middle', horizontal: 'right' };
+        totValCell.numFmt = '#,##0.00';
+        totValCell.border = {
+          top: { style: 'medium', color: { argb: '047857' } },
+          bottom: { style: 'double', color: { argb: '047857' } },
+          left: { style: 'thin', color: { argb: 'CBD5E1' } },
+          right: { style: 'medium', color: { argb: '0F172A' } }
+        };
+
+        // --- SECCIÓN DE FIRMAS Y APROBACIÓN ---
+        const sigRowIdx = currentRowIdx + 3;
+        ws.getRow(sigRowIdx - 1).height = 14;
+
+        const sigRow1 = ws.getRow(sigRowIdx);
+        sigRow1.height = 20;
+        sigRow1.values = ["INSPECTOR DE OBRA", "", "", "SUPERVISOR / CONTRATISTA", ""];
+        ws.mergeCells(`A${sigRowIdx}:B${sigRowIdx}`);
+        ws.mergeCells(`D${sigRowIdx}:E${sigRowIdx}`);
+
+        const sigA = sigRow1.getCell(1);
+        sigA.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: '0F172A' } };
+        sigA.alignment = { vertical: 'middle', horizontal: 'center' };
+        sigA.border = { top: { style: 'medium', color: { argb: '0F172A' } } };
+
+        const sigD = sigRow1.getCell(4);
+        sigD.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: '0F172A' } };
+        sigD.alignment = { vertical: 'middle', horizontal: 'center' };
+        sigD.border = { top: { style: 'medium', color: { argb: '0F172A' } } };
+
+        const sigRow2 = ws.getRow(sigRowIdx + 1);
+        sigRow2.height = 18;
+        sigRow2.values = [
+          projectMeta.inspectorName || 'Firma de Inspector',
+          "",
+          "",
+          projectMeta.contractorName || 'Firma de Contratista',
+          ""
+        ];
+        ws.mergeCells(`A${sigRowIdx + 1}:B${sigRowIdx + 1}`);
+        ws.mergeCells(`D${sigRowIdx + 1}:E${sigRowIdx + 1}`);
+
+        const sigSubA = sigRow2.getCell(1);
+        sigSubA.font = { name: 'Calibri', size: 8.5, italic: true, color: { argb: '64748B' } };
+        sigSubA.alignment = { vertical: 'middle', horizontal: 'center' };
+
+        const sigSubD = sigRow2.getCell(4);
+        sigSubD.font = { name: 'Calibri', size: 8.5, italic: true, color: { argb: '64748B' } };
+        sigSubD.alignment = { vertical: 'middle', horizontal: 'center' };
       }
 
       const fileName = `Memorias_${selectedActa.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
@@ -380,7 +728,7 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      if (showToast) showToast('¡Archivo exportado exitosamente!');
+      if (showToast) showToast('¡Memorias de cálculo exportadas a Excel con diseño ejecutivo e imágenes proporcionales!');
     } catch (err: any) {
       console.error("Error exporting to Excel", err);
       alert("Error al exportar Excel: " + (err.message || err));
@@ -389,9 +737,12 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
 
   const handleExportConsolidatedActasExcel = async () => {
     try {
-      const XLSX = await import('xlsx');
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'Sistema de Control de Obras y Telecomunicaciones';
+      wb.lastModifiedBy = projectMeta.inspectorName || 'Inspector de Obra';
+      wb.created = new Date();
+
       const actasSorted = getAvailableActas(elements, globalConfig?.totalActas || 10);
-      
       const normKey = (k?: string) => (k || '').trim().replace(',', '.');
       const itemActaTotals = new Map<string, Map<string, number>>();
 
@@ -448,64 +799,163 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
         }
       });
 
-      const header = ['ITEM', 'DESCRIPCIÓN', 'UNID', 'CANTIDAD PRESUPUESTO', ...actasSorted];
-      const sheetData: any[][] = [header];
+      const ws = wb.addWorksheet("Matriz por Actas", {
+        views: [{ showGridLines: true }]
+      });
+
+      // Anchos de columna
+      const colsDef = [
+        { width: 14 }, // ITEM
+        { width: 48 }, // DESCRIPCION
+        { width: 12 }, // UNID
+        { width: 22 }, // CANTIDAD PRESUPUESTO
+        ...actasSorted.map(() => ({ width: 18 })) // Cada Acta
+      ];
+      ws.columns = colsDef;
+
+      // Fila 1: Título Consolidado
+      const titleRow = ws.getRow(1);
+      titleRow.height = 28;
+      const totalColCount = 4 + actasSorted.length;
+      titleRow.values = ["CONSOLIDADO DE CANTIDADES EJECUTADAS POR ACTAS DE COBRO", ...Array(totalColCount - 1).fill("")];
+      ws.mergeCells(1, 1, 1, totalColCount);
+      const titleCell = titleRow.getCell(1);
+      titleCell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FFFFFF' } };
+      titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1E293B' } };
+      titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+      // Fila 2: Información del Proyecto
+      const infoRow = ws.getRow(2);
+      infoRow.height = 22;
+      infoRow.values = [
+        `PROYECTO: ${projectMeta.sectorLocation || 'General'} | CONTRATISTA: ${projectMeta.contractorName || 'General'}`,
+        ...Array(totalColCount - 1).fill("")
+      ];
+      ws.mergeCells(2, 1, 2, totalColCount);
+      const infoCell = infoRow.getCell(1);
+      infoCell.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: '1E293B' } };
+      infoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F1F5F9' } };
+      infoCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+
+      // Fila 3: Espaciador
+      ws.getRow(3).height = 8;
+
+      // Fila 4: Encabezados de Columnas
+      const headerRow = ws.getRow(4);
+      headerRow.height = 24;
+      headerRow.values = ['ITEM', 'DESCRIPCIÓN', 'UNID', 'CANTIDAD PRESUPUESTO', ...actasSorted];
+      
+      for (let col = 1; col <= totalColCount; col++) {
+        const cell = headerRow.getCell(col);
+        const isActaCol = col > 4;
+        cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFF' } };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: isActaCol ? '0F766E' : '1E293B' }
+        };
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: col === 1 || col === 3 ? 'center' : (col >= 4 ? 'right' : 'left')
+        };
+        cell.border = {
+          top: { style: 'medium', color: { argb: '0F172A' } },
+          bottom: { style: 'medium', color: { argb: '0F172A' } },
+          left: { style: 'thin', color: { argb: '475569' } },
+          right: { style: 'thin', color: { argb: '475569' } }
+        };
+      }
+
+      let rowIdx = 5;
+      const colTotals = Array(actasSorted.length).fill(0);
+      let totalBudgetSum = 0;
 
       itemsMapLocal.forEach((ci, key) => {
         const actMap = itemActaTotals.get(key);
-        
-        let totalExecuted = 0;
-        if (actMap) {
-          actasSorted.forEach(a => {
-            totalExecuted += (actMap.get(a) || 0);
-          });
-        }
-        
         const rowData: any[] = [
           ci.item,
           ci.description,
           ci.unit,
-          ci.budgetQuantity > 0 ? parseFloat(ci.budgetQuantity.toFixed(2)) : ''
+          ci.budgetQuantity > 0 ? parseFloat(ci.budgetQuantity.toFixed(2)) : 0
         ];
-        
-        actasSorted.forEach(actaName => {
-          if (!actMap || !actMap.has(actaName)) {
-            rowData.push(0);
-          } else {
-            const val = actMap.get(actaName) || 0;
-            rowData.push(parseFloat(val.toFixed(2)));
-          }
+        totalBudgetSum += ci.budgetQuantity > 0 ? ci.budgetQuantity : 0;
+
+        actasSorted.forEach((actaName, aIdx) => {
+          const val = (actMap && actMap.get(actaName)) ? actMap.get(actaName)! : 0;
+          rowData.push(parseFloat(val.toFixed(2)));
+          colTotals[aIdx] += val;
         });
-        
-        sheetData.push(rowData);
+
+        const dRow = ws.getRow(rowIdx);
+        dRow.height = 20;
+        dRow.values = rowData;
+
+        const isEven = (rowIdx - 5) % 2 === 0;
+        const rowBg = isEven ? 'FFFFFF' : 'F8FAFC';
+
+        for (let col = 1; col <= totalColCount; col++) {
+          const cell = dRow.getCell(col);
+          cell.font = { name: 'Calibri', size: 9.5, color: { argb: '0F172A' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+          cell.alignment = {
+            vertical: 'middle',
+            horizontal: col === 1 || col === 3 ? 'center' : (col >= 4 ? 'right' : 'left')
+          };
+          if (col >= 4) {
+            cell.numFmt = '#,##0.00';
+            if (col > 4 && typeof cell.value === 'number' && cell.value > 0) {
+              cell.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: '047857' } };
+            }
+          }
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'E2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'E2E8F0' } },
+            left: { style: 'thin', color: { argb: 'E2E8F0' } },
+            right: { style: 'thin', color: { argb: 'E2E8F0' } }
+          };
+        }
+
+        rowIdx++;
       });
 
-      const ws = XLSX.utils.aoa_to_sheet(sheetData);
-      
-      for (const cell in ws) {
-        if (cell.startsWith('!')) continue;
-        const colIndex = XLSX.utils.decode_cell(cell).c;
-        if (ws[cell].t === 'n' && colIndex >= 3) {
-          ws[cell].z = '#,##0.00';
-        }
+      // Fila de Totales
+      const footRow = ws.getRow(rowIdx);
+      footRow.height = 24;
+      const footValues: any[] = ["TOTALES", "", "", parseFloat(totalBudgetSum.toFixed(2))];
+      colTotals.forEach(tot => footValues.push(parseFloat(tot.toFixed(2))));
+      footRow.values = footValues;
+      ws.mergeCells(rowIdx, 1, rowIdx, 3);
+
+      for (let col = 1; col <= totalColCount; col++) {
+        const cell = footRow.getCell(col);
+        cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '065F46' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'ECFDF5' } };
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: col <= 3 ? 'right' : 'right'
+        };
+        if (col >= 4) cell.numFmt = '#,##0.00';
+        cell.border = {
+          top: { style: 'medium', color: { argb: '047857' } },
+          bottom: { style: 'double', color: { argb: '047857' } },
+          left: { style: 'thin', color: { argb: 'CBD5E1' } },
+          right: { style: 'thin', color: { argb: 'CBD5E1' } }
+        };
       }
 
-      // Auto-size columns loosely
-      ws['!cols'] = [
-        { wch: 10 }, // ITEM
-        { wch: 60 }, // DESCRIPCION
-        { wch: 10 }, // UNID
-        { wch: 25 }, // PRESUPUESTO
-        ...actasSorted.map(() => ({ wch: 15 })) // ACTAS
-      ];
-
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Matriz por Actas");
-      
       const fileName = `Matriz_Actas_Consolidado_${new Date().toISOString().split('T')[0]}.xlsx`;
-      XLSX.writeFile(wb, fileName);
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
-      if (showToast) showToast('¡Archivo exportado exitosamente!');
+      if (showToast) showToast('¡Matriz de actas exportada a Excel exitosamente!');
     } catch (err) {
       console.error(err);
       alert('Error exportando archivo de excel');
@@ -1582,6 +2032,77 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
                     <div className="hidden print:block text-xs text-slate-800 font-medium min-h-[40px] whitespace-pre-wrap">
                       {noteVal || 'Sin observaciones adicionales registradas.'}
                     </div>
+                  </div>
+
+                  {/* DETALLE DE ELEMENTOS (MEMORIA DE CÁLCULO) */}
+                  <div className="border-2 border-slate-900 rounded overflow-hidden">
+                    <div className="bg-slate-900 text-white text-xs font-black uppercase tracking-wider py-1.5 px-3 text-center">
+                      DETALLE DE ELEMENTOS (MEMORIA DE CÁLCULO)
+                    </div>
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-700 text-white font-bold text-[11px]">
+                          <th className="py-1.5 px-3 text-center border-r border-slate-600 w-24">Etiqueta</th>
+                          <th className="py-1.5 px-3 border-r border-slate-600">Tipo</th>
+                          <th className="py-1.5 px-3 text-center border-r border-slate-600 w-28">Estado</th>
+                          <th className="py-1.5 px-3 text-center border-r border-slate-600 w-24">Avance</th>
+                          <th className="py-1.5 px-3 text-right w-36">Cantidad Aportada</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredElements.map((el, eIdx) => {
+                          let baseQty = el.type === 'line' ? (el.meters || 1) : 1;
+                          let aportada = 0;
+                          if (el.status === 'Terminado') {
+                            aportada = baseQty;
+                          } else if (el.status === 'En proceso') {
+                            if (el.progressPercent !== undefined) {
+                              aportada = baseQty * (el.progressPercent / 100);
+                            }
+                          } else if (el.acta) {
+                            aportada = baseQty;
+                          }
+
+                          return (
+                            <tr key={el.id || eIdx} className={`border-b border-slate-200 ${eIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+                              <td className="py-1.5 px-3 text-center font-bold text-slate-900 border-r border-slate-200">
+                                {el.label}
+                              </td>
+                              <td className="py-1.5 px-3 text-slate-700 border-r border-slate-200">
+                                {el.camType || el.pipes || (el.type === 'line' ? 'Canalización' : 'Cámara')}
+                              </td>
+                              <td className="py-1.5 px-3 text-center border-r border-slate-200">
+                                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                                  el.status === 'Terminado' ? 'bg-emerald-100 text-emerald-800' : (el.status === 'En proceso' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700')
+                                }`}>
+                                  {el.status}
+                                </span>
+                              </td>
+                              <td className="py-1.5 px-3 text-center font-bold text-slate-800 border-r border-slate-200">
+                                {el.status === 'En proceso' && el.progressPercent !== undefined ? `${el.progressPercent}%` : (el.status === 'Terminado' ? '100%' : '100%')}
+                              </td>
+                              <td className="py-1.5 px-3 text-right font-black text-emerald-700">
+                                {aportada.toFixed(2)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        <tr className="bg-emerald-50 font-black text-xs text-emerald-900 border-t-2 border-slate-900">
+                          <td colSpan={4} className="py-2 px-3 text-right uppercase">
+                            TOTAL APORTADO AL ÍTEM:
+                          </td>
+                          <td className="py-2 px-3 text-right text-emerald-800 text-sm">
+                            {filteredElements.reduce((acc, el) => {
+                              let baseQty = el.type === 'line' ? (el.meters || 1) : 1;
+                              if (el.status === 'Terminado') return acc + baseQty;
+                              if (el.status === 'En proceso' && el.progressPercent !== undefined) return acc + (baseQty * el.progressPercent / 100);
+                              if (el.acta) return acc + baseQty;
+                              return acc;
+                            }, 0).toFixed(2)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
 
                   {/* Signatures section for print */}
