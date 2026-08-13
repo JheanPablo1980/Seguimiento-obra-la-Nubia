@@ -5,6 +5,7 @@ import { InspectionElement, ProjectMeta, ContractualItem, GlobalConfig } from '.
 import { MemoriaCanvasMiniature } from '../components/MemoriaCanvasMiniature';
 import { DEFAULT_CONTRACTUAL_ITEMS } from '../data/sampleData';
 import { normalizeActa, getAvailableActas } from '../utils/actaUtils';
+import { normalizarPorcentaje, calcularAvancePorCronograma } from '../utils/cronogramaUtils';
 import { 
   X, 
   Printer, 
@@ -165,9 +166,8 @@ export const MemoriaCalculoModal: React.FC<MemoriaCalculoModalProps> = ({
       group.executedQty += baseQty;
     } else if (el.status === 'En proceso') {
       group.inProgressQty += baseQty;
-      if (el.progressPercent !== undefined) {
-        group.executedQty += baseQty * (el.progressPercent / 100);
-      }
+      const pct = normalizarPorcentaje(el.progressPercent, el.status);
+      group.executedQty += baseQty * (pct / 100);
     } else if (el.acta) {
       group.executedQty += baseQty;
     }

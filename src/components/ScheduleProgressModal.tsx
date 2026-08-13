@@ -3,7 +3,7 @@ import { ScheduleItem, InspectionElement, AreaSector, AuthUser } from '../types'
 import { INITIAL_SCHEDULE_ITEMS, DEFAULT_CONTRACTUAL_ITEMS, normalizeScheduleItems } from '../data/sampleData';
 import { normalizeActa, getAvailableActas } from '../utils/actaUtils';
 import { detectColumnMapping, applyMappingToRows, REQUIRED_FIELDS, HEADER_ALIASES } from '../utils/importUtils';
-import { calcularAvancePorCronograma, matchElementToScheduleId } from '../utils/cronogramaUtils';
+import { calcularAvancePorCronograma, matchElementToScheduleId, normalizarPorcentaje } from '../utils/cronogramaUtils';
 import { 
   X, 
   CalendarCheck, 
@@ -203,7 +203,7 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
 
   // Auto-detect & calculate progress for each schedule item
   const progressMap = useMemo(() => {
-    const avances = calcularAvancePorCronograma(elements);
+    const avances = calcularAvancePorCronograma(elements, scheduleItems);
     const map: Record<string, {
       executed: number;
       inProgress: number;
@@ -256,13 +256,7 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
 
       if (matchedItemId && map[matchedItemId]) {
         const value = el.type === 'line' ? (el.meters || 0) : 1;
-        let elProgress = el.progressPercent;
-        if (elProgress === undefined || elProgress === null) {
-          if (el.status === 'Terminado') elProgress = 100;
-          else if (el.status === 'En proceso') elProgress = 50;
-          else elProgress = 0;
-        }
-        elProgress = Math.min(100, Math.max(0, Number(elProgress) || 0));
+        const elProgress = normalizarPorcentaje(el.progressPercent, el.status);
 
         const executedPart = value * (elProgress / 100);
         map[matchedItemId].count += 1;
@@ -279,13 +273,17 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
       }
     });
 
-    // Populate completionPercent based on (executed quantity / estimated target quantity)
+    // Populate completionPercent based on centralized avances
     Object.keys(map).forEach(key => {
       const item = scheduleItems.find(i => i.id === key);
-      if (item && item.targetQuantity > 0) {
+      const avgFromAvances = avances[key] ?? (item?.code ? avances[item.code] : undefined);
+
+      if (avgFromAvances !== undefined && avgFromAvances > 0) {
+        map[key].completionPercent = Math.round(avgFromAvances * 10) / 10;
+      } else if (item && item.targetQuantity > 0) {
         map[key].completionPercent = Math.min(100, Math.round((map[key].executed / item.targetQuantity) * 1000) / 10);
       } else {
-        map[key].completionPercent = Math.round((avances[key] || 0) * 10) / 10;
+        map[key].completionPercent = 0;
       }
     });
     return map;
@@ -357,6 +355,40 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
     });
 
     showToast(`Se vincularon automáticamente ${linkedCount} elementos al cronograma`);
+  };
+
+  const handleExportScheduleCSV = () => {
+    const avances = calcularAvancePorCronograma(elements, scheduleItems);
+    const headerParts = ['ID_UNICO_CRONO', 'CÓDIGO', 'DESCRIPCIÓN', 'CATEGORÍA', 'UNIDAD', 'CANTIDAD_META', 'CANTIDAD_EJECUTADA', 'PORCENTAJE_COMPLETADO_%'];
+    const csvLines = [headerParts.join(';')];
+
+    scheduleItems.forEach(item => {
+      const prog = progressMap[item.id];
+      const pctAvance = avances[item.id] ?? (item.code ? avances[item.code] : 0);
+      const executedQty = prog ? prog.executed : 0;
+
+      const row = [
+        `"${item.id}"`,
+        `"${item.code || ''}"`,
+        `"${(item.description || '').replace(/"/g, '""')}"`,
+        `"${item.category || ''}"`,
+        `"${item.unit || ''}"`,
+        item.targetQuantity || 0,
+        executedQty.toFixed(2).replace('.', ','),
+        `${pctAvance.toFixed(2).replace('.', ',')}%`
+      ];
+      csvLines.push(row.join(';'));
+    });
+
+    const csvContent = '\uFEFF' + csvLines.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Avance_Cronograma_Consolidado_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('¡Cronograma con avances exportado a CSV!');
   };
 
   const handleExportConsolidatedActasCSV = () => {
@@ -836,6 +868,14 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
               <span>📋 Cargar Cronograma (CSV)</span>
             </button>
             <button
+              onClick={handleExportScheduleCSV}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white border border-blue-400 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 shadow-sm"
+              title="Descargar tabla del cronograma con su avance agrupado por ID_UNICO_CRONO en CSV/Excel"
+            >
+              <Download className="w-3.5 h-3.5 text-blue-200" />
+              <span>📈 Exportar Cronograma</span>
+            </button>
+            <button
               onClick={handleExportConsolidatedActasCSV}
               className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 shadow-sm"
               title="Descargar el archivo de salida en formato anexo con cantidades divididas en columnas por Acta (ACTA 1, ACTA 2, ACTA 3...)"
@@ -1241,9 +1281,7 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                       );
                       const selectedVal = currentItem ? currentItem.id : (el.scheduleItemId || '');
 
-                      const elProgress = el.progressPercent !== undefined ? el.progressPercent : (
-                        el.status === 'Terminado' ? 100 : (el.status === 'En proceso' ? 50 : 0)
-                      );
+                      const elProgress = normalizarPorcentaje(el.progressPercent, el.status);
 
                       const executedQty = el.type === 'line' 
                         ? `${((el.meters || 0) * (elProgress / 100)).toFixed(1)}m` 

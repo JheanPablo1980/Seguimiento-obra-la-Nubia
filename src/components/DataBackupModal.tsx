@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AreaSector, InspectionElement, ProjectMeta } from '../types';
 import { Download, Upload, X, Check, Copy, FileSpreadsheet } from 'lucide-react';
+import { normalizarPorcentaje } from '../utils/cronogramaUtils';
 
 interface DataBackupModalProps {
   isOpen: boolean;
@@ -51,9 +52,10 @@ export const DataBackupModal: React.FC<DataBackupModalProps> = ({
 
   const handleDownloadCSV = () => {
     // Generate CSV for inspection elements
-    let csv = 'ID,Tipo,Etiqueta,Estado,Acta,Observaciones,Fecha,Norma,Pipas_Tuberia,Cables,Metros\n';
+    let csv = 'ID,Tipo,Etiqueta,ID_UNICO_CRONO,Estado,Porcentaje_Avance,Acta,Observaciones,Fecha,Norma,Pipas_Tuberia,Cables,Metros\n';
     elements.forEach(el => {
-      csv += `"${el.id}","${el.type}","${el.label}","${el.status}","${el.acta || ''}","${(el.observations || '').replace(/"/g, '""')}","${el.date}","${el.camType || ''}","${el.pipes || ''}","${el.cables || ''}","${el.meters || 0}"\n`;
+      const pct = normalizarPorcentaje(el.progressPercent, el.status);
+      csv += `"${el.id}","${el.type}","${el.label}","${el.scheduleItemId || ''}","${el.status}","${pct}%","${el.acta || ''}","${(el.observations || '').replace(/"/g, '""')}","${el.date}","${el.camType || ''}","${el.pipes || ''}","${el.cables || ''}","${el.meters || 0}"\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
