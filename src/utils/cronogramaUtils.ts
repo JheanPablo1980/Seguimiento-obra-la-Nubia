@@ -25,11 +25,31 @@ export function normalizarPorcentaje(progress?: number | null, status?: string):
 /**
  * Comprueba si un elemento de la bitácora coincide con el ID o Código de un rubro del cronograma.
  */
-export function matchElementToScheduleId(el: InspectionElement, targetIdOrCode: string): boolean {
+export function matchElementToScheduleId(
+  el: InspectionElement, 
+  targetIdOrCode: string,
+  scheduleItems?: ScheduleItem[]
+): boolean {
   if (!targetIdOrCode) return false;
   const target = targetIdOrCode.trim().toUpperCase();
 
-  // 1. Coincidencia explícita por scheduleItemId
+  // 1. Check scheduleItems if provided
+  if (scheduleItems && scheduleItems.length > 0) {
+    const targetItem = scheduleItems.find(
+      i => i.id.trim().toUpperCase() === target || (i.code && i.code.trim().toUpperCase() === target)
+    );
+    if (targetItem && el.scheduleItemId) {
+      const elItemId = el.scheduleItemId.trim().toUpperCase();
+      if (
+        elItemId === targetItem.id.trim().toUpperCase() || 
+        (targetItem.code && elItemId === targetItem.code.trim().toUpperCase())
+      ) {
+        return true;
+      }
+    }
+  }
+
+  // 2. Coincidencia explícita por scheduleItemId
   if (el.scheduleItemId) {
     const elItemId = el.scheduleItemId.trim().toUpperCase();
     if (elItemId === target) return true;
@@ -47,6 +67,8 @@ export function matchElementToScheduleId(el: InspectionElement, targetIdOrCode: 
         (elItemId === 'CAM-BT' || elItemId === 'C-BT' || elItemId === 'CAM-850')) return true;
     if ((target === 'CAM-DATOS' || target === 'C-DATOS' || target === 'CAM-858') && 
         (elItemId === 'CAM-DATOS' || elItemId === 'C-DATOS' || elItemId === 'CAM-858')) return true;
+
+    return false;
   }
 
   // 2. Coincidencia automática por especificaciones si no tiene scheduleItemId

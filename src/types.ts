@@ -38,7 +38,7 @@ export interface ScheduleItem {
   code: string; // e.g. "200502"
   description: string; // e.g. "Tubo PVC Ø4\", 6mts, Conduit"
   targetQuantity: number; // e.g. 367
-  unit: 'mts' | 'unidades' | 'tramos' | 'm²';
+  unit: 'mts' | 'unidades' | 'tramos' | 'm²' | 'und' | string;
   entrega1Target: number; // e.g. 250
   entrega1Label?: string; // e.g. "Entrega 1 - Últ. semana Jul 2026"
   entrega2Target: number; // e.g. 117

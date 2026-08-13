@@ -103,36 +103,121 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
   }, [elements, elementFilterType, elementFilterScheduleItem, searchQuery, scheduleItems]);
 
   const handleAutoLinkAllElements = () => {
+    if (!scheduleItems || scheduleItems.length === 0) {
+      showToast('No hay rubros cargados en el cronograma para vincular.');
+      return;
+    }
+
     let updatedCount = 0;
     elements.forEach(el => {
-      let matchedId = el.scheduleItemId;
-      const currentMatched = scheduleItems.find(i => i.id === matchedId || i.code === matchedId);
+      let matchedItem: ScheduleItem | undefined = undefined;
 
-      if (!currentMatched) {
+      // 1. Direct match if element already has scheduleItemId
+      if (el.scheduleItemId) {
+        const rawCode = el.scheduleItemId.trim().toUpperCase();
+        matchedItem = scheduleItems.find(item => 
+          item.id.trim().toUpperCase() === rawCode ||
+          (item.code && item.code.trim().toUpperCase() === rawCode)
+        );
+
+        // Alias or equivalence check if not direct match
+        if (!matchedItem) {
+          matchedItem = scheduleItems.find(item => 
+            matchElementToScheduleId(el, item.id, scheduleItems) || 
+            (item.code && matchElementToScheduleId(el, item.code, scheduleItems))
+          );
+        }
+      }
+
+      // 2. Text match: search if item.code or item.id is present in el.label, el.pipes, el.camType, el.observations
+      if (!matchedItem) {
+        const labelUpper = (el.label || '').trim().toUpperCase();
+        const pipesUpper = (el.pipes || '').trim().toUpperCase();
+        const camUpper = (el.camType || '').trim().toUpperCase();
+        const obsUpper = (el.observations || '').trim().toUpperCase();
+
+        matchedItem = scheduleItems.find(item => {
+          const itemCode = (item.code || '').trim().toUpperCase();
+          const itemId = item.id.trim().toUpperCase();
+
+          if (itemCode && itemCode.length >= 2) {
+            if (labelUpper.includes(itemCode) || pipesUpper.includes(itemCode) || camUpper.includes(itemCode) || obsUpper.includes(itemCode)) {
+              return true;
+            }
+          }
+          if (itemId && itemId.length >= 2) {
+            if (labelUpper.includes(itemId) || pipesUpper.includes(itemId) || camUpper.includes(itemId) || obsUpper.includes(itemId)) {
+              return true;
+            }
+          }
+          return false;
+        });
+      }
+
+      // 3. Fallback matching by element type and specifications against loaded schedule items
+      if (!matchedItem) {
         if (el.type === 'line') {
           const pipeDesc = (el.pipes || '').toLowerCase();
-          if (pipeDesc.includes('datos') || pipeDesc.includes('telecom')) matchedId = 'DUCT-4-DATOS';
-          else if (pipeDesc.includes('mt') || pipeDesc.includes('media')) matchedId = 'DUCT-4-MT';
-          else if (pipeDesc.includes('6"') || pipeDesc.includes('bt') || pipeDesc.includes('baja')) matchedId = 'DUCT-6-BT';
-          else matchedId = 'DUCT-4-MT';
+          if (pipeDesc.includes('datos') || pipeDesc.includes('telecom')) {
+            matchedItem = scheduleItems.find(i => {
+              const c = `${i.code || ''} ${i.id} ${i.description}`.toLowerCase();
+              return c.includes('datos') || c.includes('telecom');
+            });
+          } else if (pipeDesc.includes('6"') || pipeDesc.includes('bt') || pipeDesc.includes('baja')) {
+            matchedItem = scheduleItems.find(i => {
+              const c = `${i.code || ''} ${i.id} ${i.description}`.toLowerCase();
+              return c.includes('6') || c.includes('bt') || c.includes('baja');
+            });
+          } else if (pipeDesc.includes('mt') || pipeDesc.includes('media') || pipeDesc.includes('4"')) {
+            matchedItem = scheduleItems.find(i => {
+              const c = `${i.code || ''} ${i.id} ${i.description}`.toLowerCase();
+              return c.includes('mt') || c.includes('media') || c.includes('4') || c.includes('200502');
+            });
+          }
+          if (!matchedItem) {
+            matchedItem = scheduleItems.find(i => {
+              const u = (i.unit || '').toLowerCase();
+              const d = (i.description || '').toLowerCase();
+              return u === 'mts' || d.includes('ducto') || d.includes('canaliz');
+            });
+          }
         } else if (el.type === 'camera') {
           const camDesc = (el.camType || el.label || '').toLowerCase();
-          if (camDesc.includes('datos') || camDesc.includes('telecom')) matchedId = 'CAM-DATOS';
-          else if (camDesc.includes('bt') || camDesc.includes('baja')) matchedId = 'CAM-BT';
-          else if (camDesc.includes('mt') || camDesc.includes('media')) matchedId = 'CAM-MT';
-          else matchedId = 'CAM-BT';
+          if (camDesc.includes('datos') || camDesc.includes('telecom') || camDesc.includes('sb858')) {
+            matchedItem = scheduleItems.find(i => {
+              const c = `${i.code || ''} ${i.id} ${i.description}`.toLowerCase();
+              return c.includes('datos') || c.includes('telecom') || c.includes('858');
+            });
+          } else if (camDesc.includes('mt') || camDesc.includes('media')) {
+            matchedItem = scheduleItems.find(i => {
+              const c = `${i.code || ''} ${i.id} ${i.description}`.toLowerCase();
+              return c.includes('mt') || c.includes('media');
+            });
+          } else if (camDesc.includes('bt') || camDesc.includes('baja') || camDesc.includes('sb850')) {
+            matchedItem = scheduleItems.find(i => {
+              const c = `${i.code || ''} ${i.id} ${i.description}`.toLowerCase();
+              return c.includes('bt') || c.includes('baja') || c.includes('850');
+            });
+          }
+          if (!matchedItem) {
+            matchedItem = scheduleItems.find(i => {
+              const u = (i.unit || '').toLowerCase();
+              const d = (i.description || '').toLowerCase();
+              return u === 'und' || u === 'unidades' || d.includes('cámara') || d.includes('caja');
+            });
+          }
         }
-        if (matchedId) {
-          onUpdateElement({ ...el, scheduleItemId: matchedId });
+      }
+
+      if (matchedItem) {
+        if (el.scheduleItemId !== matchedItem.id) {
+          onUpdateElement({ ...el, scheduleItemId: matchedItem.id });
           updatedCount++;
         }
-      } else if (currentMatched && el.scheduleItemId !== currentMatched.id) {
-        // Standardize code to ID
-        onUpdateElement({ ...el, scheduleItemId: currentMatched.id });
-        updatedCount++;
       }
     });
-    showToast(`¡Se vincularon ${updatedCount} elementos de la bitácora con sus IDs de cronograma!`);
+
+    showToast(`¡Se vincularon ${updatedCount} elementos de la bitácora con los rubros del cronograma!`);
   };
 
   // Form for adding / editing schedule item
@@ -150,7 +235,7 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
 
   // States for importing Schedule
   const [pastedCsvText, setPastedCsvText] = useState('');
-  const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
+  const [importMode, setImportMode] = useState<'merge' | 'replace'>('replace');
   const [parsedPreviewItems, setParsedPreviewItems] = useState<ScheduleItem[]>([]);
   const [importMapping, setImportMapping] = useState<{ headers: string[], rows: string[][], mapping: Record<string, string>, step: 'summary' | 'review' } | null>(null);
   const [savedTemplates, setSavedTemplates] = useState<Record<string, Record<string, string>>>({});
@@ -335,27 +420,7 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
   if (!isOpen) return null;
 
   // Auto-link all existing elements to schedule items based on specifications
-  const handleAutoLinkAll = () => {
-    let linkedCount = 0;
-    elements.forEach(el => {
-      let targetCode: string | undefined = undefined;
-      if (el.type === 'line') {
-        const pipes = (el.pipes || '').toLowerCase();
-        if (pipes.includes('4') || pipes.includes('ø4')) targetCode = '200502';
-        else if (pipes.includes('6') || pipes.includes('ø6')) targetCode = '200503';
-      } else if (el.type === 'camera') {
-        if (el.camType === 'SB858') targetCode = 'CAM-858';
-        else targetCode = 'CAM-850';
-      }
-
-      if (targetCode && el.scheduleItemId !== targetCode) {
-        onUpdateElement({ ...el, scheduleItemId: targetCode });
-        linkedCount++;
-      }
-    });
-
-    showToast(`Se vincularon automáticamente ${linkedCount} elementos al cronograma`);
-  };
+  const handleAutoLinkAll = handleAutoLinkAllElements;
 
   const handleExportScheduleCSV = () => {
     const avances = calcularAvancePorCronograma(elements, scheduleItems);
@@ -593,10 +658,23 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
 
     const mappedRows = applyMappingToRows(importMapping.headers, importMapping.rows, importMapping.mapping);
     
-    const items: ScheduleItem[] = mappedRows.map((r: any, i) => {
-      // Default extraction to maintain backward compatibility for old tools if fields are missing
-      const idUnico = r.idUnicoCrono || `RUB-${i + 1}`;
-      const description = r.task || `Rubro ${i + 1}`;
+    // Filter out title header rows (e.g. project name header or "CRONOGRAMA OBRA..." title row)
+    const filteredRows = mappedRows.filter((r: any) => {
+      const taskUpper = (r.task || '').toString().trim().toUpperCase();
+      const idStr = (r.idUnicoCrono || '').toString().trim();
+
+      if (idStr === '0' && (taskUpper.includes('CRONOGRAMA') || taskUpper.includes('PROYECTO'))) {
+        return false;
+      }
+      if (taskUpper.startsWith('CRONOGRAMA OBRA') || taskUpper.startsWith('CRONOGRAMA DE OBRA') || taskUpper.startsWith('PROYECTO OBRA')) {
+        return false;
+      }
+      return true;
+    });
+
+    const items: ScheduleItem[] = filteredRows.map((r: any, i) => {
+      const idUnico = (r.idUnicoCrono || `RUB-${i + 1}`).toString().trim();
+      const description = (r.task || `Rubro ${i + 1}`).toString().trim();
       return {
         id: idUnico,
         code: idUnico,
@@ -618,7 +696,7 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
 
     setParsedPreviewItems(items);
     setImportMapping(null);
-    showToast(`CRONOGRAMA DETECTADO: ¡Se extrajeron ${items.length} actividades correctamente!`);
+    showToast(`CRONOGRAMA DETECTADO: ¡Se extrajeron ${items.length} actividades válidas!`);
   };
 
   const handleApplyImport = () => {
@@ -724,6 +802,41 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
 
     onUpdateScheduleItems(updatedSchedule);
     showToast(`¡Metas y unidades del cronograma sincronizadas desde la bitácora! (${updatedCount} rubros actualizados)`);
+  };
+
+  const handlePurgeUnmatchedItems = () => {
+    const defaultCodes = new Set([
+      'D-4-MT', 'D-4-DATOS', 'D-6-BT', 'C-MT', 'C-BT', 'C-DATOS',
+      'DUCT-4-MT', 'DUCT-4-DATOS', 'DUCT-6-BT', 'CAM-MT', 'CAM-BT', 'CAM-DATOS'
+    ]);
+
+    const initialCount = scheduleItems.length;
+    const cleaned = scheduleItems.filter(item => {
+      const code = (item.code || '').trim();
+      const descUpper = (item.description || '').trim().toUpperCase();
+
+      // Check if project header title row (e.g. Code "0" or starts with "CRONOGRAMA OBRA")
+      if (code === '0' || descUpper.startsWith('CRONOGRAMA OBRA') || descUpper.startsWith('CRONOGRAMA DE OBRA') || descUpper.startsWith('PROYECTO OBRA')) {
+        const prog = progressMap[item.id];
+        if (!prog || prog.count === 0) return false;
+      }
+
+      // Check if sample code that has 0 elements linked
+      const prog = progressMap[item.id];
+      if (defaultCodes.has(code) && (!prog || prog.count === 0)) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const removed = initialCount - cleaned.length;
+    if (removed > 0) {
+      onUpdateScheduleItems(cleaned);
+      showToast(`¡Se purgaron ${removed} registros de muestra / encabezados no pertenecientes al cronograma!`);
+    } else {
+      showToast('No se encontraron registros de muestra ni encabezados vacíos para remover.');
+    }
   };
 
   const handleLoadDefaultTemplate = () => {
@@ -922,6 +1035,16 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                   >
                     <Zap className="w-3.5 h-3.5 text-amber-400" />
                     <span>Sincronizar Metas y Unidades</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handlePurgeUnmatchedItems}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600/30 text-rose-300 border border-rose-500/50 hover:bg-rose-600/50 transition flex items-center gap-1.5"
+                    title="Remover rubros de muestra de plantilla no utilizados o títulos/encabezados del cronograma cargado"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Limpiar Rubros Ajenos</span>
                   </button>
 
                   <button

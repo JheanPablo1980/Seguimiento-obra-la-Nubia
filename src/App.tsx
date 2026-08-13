@@ -574,39 +574,48 @@ export default function App() {
 
   const handleUpdateElement = (updated: InspectionElement) => {
     const oldEl = elements.find(e => e.id === updated.id);
+
+    // Merge old element properties with updated properties, explicitly ensuring scheduleItemId is preserved
+    const mergedElement: InspectionElement = {
+      ...(oldEl || {}),
+      ...updated,
+      scheduleItemId: updated.scheduleItemId !== undefined
+        ? updated.scheduleItemId
+        : (oldEl?.scheduleItemId !== undefined ? oldEl.scheduleItemId : undefined)
+    } as InspectionElement;
     
     // Auto-set timeline dates when status changes
-    if (oldEl && oldEl.status !== updated.status) {
-      if (updated.status === 'En proceso' && !updated.startDate) {
-        updated.startDate = new Date().toISOString();
+    if (oldEl && oldEl.status !== mergedElement.status) {
+      if (mergedElement.status === 'En proceso' && !mergedElement.startDate) {
+        mergedElement.startDate = new Date().toISOString();
       }
-      if (updated.status === 'Terminado' && !updated.endDate) {
-        updated.endDate = new Date().toISOString();
-        if (!updated.startDate) updated.startDate = new Date().toISOString(); // Fallback if never went through 'En proceso'
+      if (mergedElement.status === 'Terminado' && !mergedElement.endDate) {
+        mergedElement.endDate = new Date().toISOString();
+        if (!mergedElement.startDate) mergedElement.startDate = new Date().toISOString(); // Fallback if never went through 'En proceso'
       }
     }
 
-    setElements(prev => prev.map(e => e.id === updated.id ? updated : e));
-    if (inspectedElement && inspectedElement.id === updated.id) {
-      setInspectedElement(updated);
+    setElements(prev => prev.map(e => e.id === mergedElement.id ? mergedElement : e));
+    if (inspectedElement && inspectedElement.id === mergedElement.id) {
+      setInspectedElement(mergedElement);
     }
 
-    const isMoved = oldEl && (Math.abs(oldEl.x - updated.x) > 2 || Math.abs(oldEl.y - updated.y) > 2 || (oldEl.x2 !== undefined && updated.x2 !== undefined && Math.abs(oldEl.x2 - updated.x2) > 2));
-    const actionType = isMoved ? 'move' : (oldEl?.status !== updated.status ? 'status_change' : 'update');
+    const isMoved = oldEl && (Math.abs(oldEl.x - mergedElement.x) > 2 || Math.abs(oldEl.y - mergedElement.y) > 2 || (oldEl.x2 !== undefined && mergedElement.x2 !== undefined && Math.abs(oldEl.x2 - mergedElement.x2) > 2));
+    const actionType = isMoved ? 'move' : (oldEl?.status !== mergedElement.status ? 'status_change' : 'update');
 
     supabaseAudit.logEvent({
       userEmail: currentUser?.email || 'anonimo@obra.com',
       userName: currentUser?.fullName || currentUser?.email || 'Inspector',
       userRole: currentUser?.role || 'inspector',
       actionType,
-      entityType: updated.type === 'camera' ? 'camara' : 'tramo',
-      entityId: String(updated.id),
-      entityName: updated.label,
+      entityType: mergedElement.type === 'camera' ? 'camara' : 'tramo',
+      entityId: String(mergedElement.id),
+      entityName: mergedElement.label,
       details: isMoved 
-        ? `Cambió la ubicación de ${updated.type === 'camera' ? 'cámara' : 'tramo'} ${updated.label}`
-        : `Actualizó datos/estado de ${updated.type === 'camera' ? 'cámara' : 'tramo'} ${updated.label} (${updated.status})`,
-      previousValue: oldEl ? JSON.stringify({ label: oldEl.label, status: oldEl.status, meters: oldEl.meters, x: oldEl.x, y: oldEl.y }) : undefined,
-      newValue: JSON.stringify({ label: updated.label, status: updated.status, meters: updated.meters, x: updated.x, y: updated.y })
+        ? `Cambió la ubicación de ${mergedElement.type === 'camera' ? 'cámara' : 'tramo'} ${mergedElement.label}`
+        : `Actualizó datos/estado de ${mergedElement.type === 'camera' ? 'cámara' : 'tramo'} ${mergedElement.label} (${mergedElement.status})`,
+      previousValue: oldEl ? JSON.stringify({ label: oldEl.label, status: oldEl.status, meters: oldEl.meters, x: oldEl.x, y: oldEl.y, scheduleItemId: oldEl.scheduleItemId }) : undefined,
+      newValue: JSON.stringify({ label: mergedElement.label, status: mergedElement.status, meters: mergedElement.meters, x: mergedElement.x, y: mergedElement.y, scheduleItemId: mergedElement.scheduleItemId })
     });
   };
 
