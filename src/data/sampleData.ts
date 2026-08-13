@@ -4,7 +4,7 @@ export const INITIAL_SCHEDULE_ITEMS: ScheduleItem[] = [
   {
     id: 'DUCT-4-MT',
     code: 'D-4-MT',
-    description: 'Ducto PVC Ø4" MT (Media Tensión)',
+    description: 'Ducto PVC Ø4" MT (Canalizaciones Media Tensión)',
     targetQuantity: 1548,
     unit: 'mts',
     entrega1Target: 936,
@@ -17,7 +17,7 @@ export const INITIAL_SCHEDULE_ITEMS: ScheduleItem[] = [
   {
     id: 'DUCT-4-DATOS',
     code: 'D-4-DATOS',
-    description: 'Ducto PVC Ø4" Datos / Telecom',
+    description: 'Ducto PVC Ø4" Datos (Canalizaciones Telecomunicación)',
     targetQuantity: 1833,
     unit: 'mts',
     entrega1Target: 1628,
@@ -30,7 +30,7 @@ export const INITIAL_SCHEDULE_ITEMS: ScheduleItem[] = [
   {
     id: 'DUCT-6-BT',
     code: 'D-6-BT',
-    description: 'Ducto PVC Ø6" BT (Baja Tensión)',
+    description: 'Ducto PVC Ø6" BT (Canalizaciones Baja Tensión)',
     targetQuantity: 8233,
     unit: 'mts',
     entrega1Target: 5460,
@@ -43,9 +43,9 @@ export const INITIAL_SCHEDULE_ITEMS: ScheduleItem[] = [
   {
     id: 'CAM-MT',
     code: 'C-MT',
-    description: 'Cámaras de Media Tensión (MT)',
+    description: 'Cámaras y Cajas de Media Tensión (MT)',
     targetQuantity: 27,
-    unit: 'unidades',
+    unit: 'und',
     entrega1Target: 22,
     entrega1Label: 'Entrega 1 - Intersecciones (22 und)',
     entrega2Target: 5,
@@ -56,9 +56,9 @@ export const INITIAL_SCHEDULE_ITEMS: ScheduleItem[] = [
   {
     id: 'CAM-BT',
     code: 'C-BT',
-    description: 'Cámaras de Baja Tensión (BT)',
+    description: 'Cámaras y Cajas de Baja Tensión (BT)',
     targetQuantity: 52,
-    unit: 'unidades',
+    unit: 'und',
     entrega1Target: 38,
     entrega1Label: 'Entrega 1 - Intersecciones (38 und)',
     entrega2Target: 14,
@@ -69,9 +69,9 @@ export const INITIAL_SCHEDULE_ITEMS: ScheduleItem[] = [
   {
     id: 'CAM-DATOS',
     code: 'C-DATOS',
-    description: 'Cámaras de Datos / Telecomunicación',
+    description: 'Cámaras y Cajas de Datos / Telecomunicación',
     targetQuantity: 45,
-    unit: 'unidades',
+    unit: 'und',
     entrega1Target: 37,
     entrega1Label: 'Entrega 1 - Intersecciones (37 und)',
     entrega2Target: 8,
@@ -80,6 +80,58 @@ export const INITIAL_SCHEDULE_ITEMS: ScheduleItem[] = [
     category: 'camara'
   }
 ];
+
+export function normalizeScheduleItems(items: ScheduleItem[]): ScheduleItem[] {
+  if (!items || items.length === 0) return INITIAL_SCHEDULE_ITEMS;
+
+  const isOldSchema = items.some(i => 
+    i.id === '200502' || i.id === '200503' || i.id === 'CAM-850' ||
+    (i.id === 'DUCT-4-MT' && i.targetQuantity !== 1548) ||
+    (i.id === 'DUCT-4-DATOS' && i.targetQuantity !== 1833) ||
+    (i.id === 'DUCT-6-BT' && i.targetQuantity !== 8233) ||
+    (i.id === 'CAM-MT' && i.targetQuantity !== 27) ||
+    (i.id === 'CAM-BT' && i.targetQuantity !== 52) ||
+    (i.id === 'CAM-DATOS' && i.targetQuantity !== 45)
+  );
+
+  const missingCore = INITIAL_SCHEDULE_ITEMS.some(init => !items.some(i => i.id === init.id || i.code === init.code));
+
+  if (isOldSchema || missingCore) {
+    return INITIAL_SCHEDULE_ITEMS;
+  }
+
+  return items.map(item => {
+    const desc = (item.description || '').toLowerCase();
+    let newUnit = item.unit;
+    if (desc.includes('camara') || desc.includes('cámara') || desc.includes('caja')) {
+      newUnit = 'und';
+    } else if (
+      desc.includes('canalizacion') ||
+      desc.includes('canalización') ||
+      desc.includes('tuberia') ||
+      desc.includes('tubería') ||
+      desc.includes('ducto') ||
+      desc.includes('tubo')
+    ) {
+      newUnit = 'mts';
+    }
+
+    let target = item.targetQuantity;
+    const code = (item.code || '').toLowerCase();
+    if (item.id === 'DUCT-4-MT' || code.includes('d-4-mt') || desc.includes('4" mt')) target = 1548;
+    else if (item.id === 'DUCT-4-DATOS' || code.includes('d-4-datos') || desc.includes('4" datos')) target = 1833;
+    else if (item.id === 'DUCT-6-BT' || code.includes('d-6-bt') || desc.includes('6" bt')) target = 8233;
+    else if (item.id === 'CAM-MT' || code.includes('c-mt') || (desc.includes('cámara') && desc.includes('media'))) target = 27;
+    else if (item.id === 'CAM-BT' || code.includes('c-bt') || (desc.includes('cámara') && desc.includes('baja'))) target = 52;
+    else if (item.id === 'CAM-DATOS' || code.includes('c-datos') || (desc.includes('cámara') && desc.includes('datos'))) target = 45;
+
+    return {
+      ...item,
+      unit: newUnit,
+      targetQuantity: target
+    };
+  });
+}
 
 export const AREA_COLOR_PALETTE: AreaColor[] = [
   { fill: 'rgba(168, 85, 247, 0.22)', stroke: '#9333ea', badge: '#7e22ce' }, // Purple

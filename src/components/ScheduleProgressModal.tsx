@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ScheduleItem, InspectionElement, AreaSector, AuthUser } from '../types';
-import { INITIAL_SCHEDULE_ITEMS, DEFAULT_CONTRACTUAL_ITEMS } from '../data/sampleData';
+import { INITIAL_SCHEDULE_ITEMS, DEFAULT_CONTRACTUAL_ITEMS, normalizeScheduleItems } from '../data/sampleData';
 import { normalizeActa, getAvailableActas } from '../utils/actaUtils';
 import { detectColumnMapping, applyMappingToRows, REQUIRED_FIELDS, HEADER_ALIASES } from '../utils/importUtils';
 import { calcularAvancePorCronograma } from '../utils/cronogramaUtils';
@@ -379,12 +379,27 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
       return;
     }
 
+    const descLower = description.trim().toLowerCase();
+    let finalUnit = unit;
+    if (descLower.includes('camara') || descLower.includes('cámara') || descLower.includes('caja')) {
+      finalUnit = 'und';
+    } else if (
+      descLower.includes('canalizacion') ||
+      descLower.includes('canalización') ||
+      descLower.includes('tuberia') ||
+      descLower.includes('tubería') ||
+      descLower.includes('ducto') ||
+      descLower.includes('tubo')
+    ) {
+      finalUnit = 'mts';
+    }
+
     const newItem: ScheduleItem = {
       id: editingItem ? editingItem.id : (code.trim().toUpperCase() || `ITEM-${Date.now()}`),
       code: code.trim(),
       description: description.trim(),
       targetQuantity: Number(targetQuantity) || 0,
-      unit,
+      unit: finalUnit,
       entrega1Target: Number(entrega1Target) || 0,
       entrega1Label,
       entrega2Target: Number(entrega2Target) || 0,
@@ -542,6 +557,12 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleSyncMetasAndUnits = () => {
+    const normalized = normalizeScheduleItems(scheduleItems);
+    onUpdateScheduleItems(normalized);
+    showToast('¡Metas y unidades actualizadas según plano/bitácora! (Cámaras/Cajas: und | Canalizaciones/Tuberías: mts)');
   };
 
   const handleLoadDefaultTemplate = () => {
@@ -724,6 +745,16 @@ export const ScheduleProgressModal: React.FC<ScheduleProgressModalProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSyncMetasAndUnits}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600/30 text-indigo-300 border border-indigo-500/50 hover:bg-indigo-600/50 transition flex items-center gap-1.5"
+                    title="Actualizar las metas y unidades (Cámaras: und, Canalizaciones/Tuberías: mts) desde las cantidades del plano y bitácora"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Sincronizar Metas y Unidades</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => setShowPendienteTotal(!showPendienteTotal)}

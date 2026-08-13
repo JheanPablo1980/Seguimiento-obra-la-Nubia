@@ -16,7 +16,8 @@ import {
   INITIAL_PROJECT_META, 
   INITIAL_AREAS, 
   INITIAL_ELEMENTS,
-  INITIAL_SCHEDULE_ITEMS
+  INITIAL_SCHEDULE_ITEMS,
+  normalizeScheduleItems
 } from './data/sampleData';
 
 import { Header } from './components/Header';
@@ -160,7 +161,9 @@ export default function App() {
         if (cloudElements && cloudElements.length > 0) setElements(cloudElements);
 
         const cloudSchedule = await supabaseSchedule.fetchScheduleItems();
-        if (cloudSchedule && cloudSchedule.length > 0) setScheduleItems(cloudSchedule);
+        if (cloudSchedule && cloudSchedule.length > 0) {
+          setScheduleItems(normalizeScheduleItems(cloudSchedule));
+        }
       } catch (err) {
         console.warn('Note: Initial Supabase cloud fetch fallback:', err);
       }
@@ -222,8 +225,9 @@ export default function App() {
   // Schedule / Cronograma Items State
   const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>(() => {
     try {
-      const saved = localStorage.getItem('obra_schedule_items_v1');
-      return saved ? JSON.parse(saved) : INITIAL_SCHEDULE_ITEMS;
+      const saved = localStorage.getItem('obra_schedule_items_v3') || localStorage.getItem('obra_schedule_items_v1');
+      const loaded = saved ? JSON.parse(saved) : INITIAL_SCHEDULE_ITEMS;
+      return normalizeScheduleItems(loaded);
     } catch (e) {
       return INITIAL_SCHEDULE_ITEMS;
     }
@@ -233,7 +237,10 @@ export default function App() {
   const [scheduleInitialTab, setScheduleInitialTab] = useState<'matrix' | 'bySector' | 'byElement' | 'manage' | 'import'>('matrix');
 
   useEffect(() => {
-    try { localStorage.setItem('obra_schedule_items_v1', JSON.stringify(scheduleItems)); } catch (e) {}
+    try {
+      localStorage.setItem('obra_schedule_items_v3', JSON.stringify(scheduleItems));
+      localStorage.setItem('obra_schedule_items_v1', JSON.stringify(scheduleItems));
+    } catch (e) {}
     setSyncStatus('syncing');
     const t = setTimeout(() => { supabaseSchedule.saveScheduleItems(scheduleItems).then(() => setSyncStatus(navigator.onLine ? 'synced' : 'offline')); }, 3000);
     return () => clearTimeout(t);
