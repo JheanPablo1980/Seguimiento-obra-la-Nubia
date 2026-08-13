@@ -100,7 +100,10 @@ export const SectorCards: React.FC<SectorCardsProps> = ({
                   <div className="flex items-center gap-1.5 overflow-hidden pr-2">
                     <span
                       className="w-3.5 h-3.5 rounded-full border shadow-sm shrink-0"
-                      style={{ backgroundColor: area.color.stroke, borderColor: area.color.badge }}
+                      style={{
+                        backgroundColor: (typeof area.color === 'object' && area.color?.stroke) ? area.color.stroke : (typeof area.color === 'string' ? area.color : '#9333ea'),
+                        borderColor: (typeof area.color === 'object' && area.color?.badge) ? area.color.badge : '#7e22ce'
+                      }}
                     />
                     <span className="font-bold text-xs text-slate-800 truncate" title={`${area.code || ''} ${area.name}`}>
                       {area.code && (

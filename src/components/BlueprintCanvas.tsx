@@ -836,15 +836,24 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         ctx.lineTo(area.points[i].x, area.points[i].y);
       }
       ctx.closePath();
-      ctx.fillStyle = area.color || 'rgba(168, 85, 247, 0.18)';
+
+      const fillColor = (typeof area.color === 'object' && area.color && 'fill' in area.color && area.color.fill)
+        ? area.color.fill
+        : (typeof area.color === 'string' && area.color ? area.color : 'rgba(168, 85, 247, 0.22)');
+      const strokeColor = (typeof area.color === 'object' && area.color && 'stroke' in area.color && area.color.stroke)
+        ? area.color.stroke
+        : (typeof area.borderColor === 'string' && area.borderColor ? area.borderColor : '#9333ea');
+
+      ctx.fillStyle = fillColor;
       ctx.fill();
-      ctx.strokeStyle = area.borderColor || 'rgba(168, 85, 247, 0.85)';
+      ctx.strokeStyle = strokeColor;
       ctx.lineWidth = 2.5;
       ctx.stroke();
 
       const cx = area.points.reduce((sum, p) => sum + p.x, 0) / area.points.length;
       const cy = area.points.reduce((sum, p) => sum + p.y, 0) / area.points.length;
-      drawLabelBadge(ctx, cx, cy, area.name, area.borderColor || '#a855f7', undefined, iconScale, false);
+      const dimStr = area.calculatedAreaM2 ? ` (${area.calculatedAreaM2} m²)` : '';
+      drawLabelBadge(ctx, cx, cy, `${area.name}${dimStr}`, strokeColor, undefined, iconScale, false);
       ctx.restore();
     });
 
@@ -1027,9 +1036,17 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         ctx.lineTo(area.points[i].x, area.points[i].y);
       }
       ctx.closePath();
-      ctx.fillStyle = area.color || 'rgba(168, 85, 247, 0.18)';
+
+      const fillColor = (typeof area.color === 'object' && area.color && 'fill' in area.color && area.color.fill)
+        ? area.color.fill
+        : (typeof area.color === 'string' && area.color ? area.color : 'rgba(168, 85, 247, 0.22)');
+      const strokeColor = (typeof area.color === 'object' && area.color && 'stroke' in area.color && area.color.stroke)
+        ? area.color.stroke
+        : (typeof area.borderColor === 'string' && area.borderColor ? area.borderColor : '#9333ea');
+
+      ctx.fillStyle = fillColor;
       ctx.fill();
-      ctx.strokeStyle = area.borderColor || 'rgba(168, 85, 247, 0.85)';
+      ctx.strokeStyle = strokeColor;
       ctx.lineWidth = 2.5;
       ctx.stroke();
 
@@ -1037,7 +1054,9 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       if (showAreaLabels) {
         const cx = area.points.reduce((sum, p) => sum + p.x, 0) / area.points.length;
         const cy = area.points.reduce((sum, p) => sum + p.y, 0) / area.points.length;
-        drawLabelBadge(ctx, cx, cy, area.name, area.borderColor || '#a855f7', undefined, iconScale, false);
+        const dimStr = area.calculatedAreaM2 ? ` (${area.calculatedAreaM2} m²)` : (area.widthMeters && area.lengthMeters ? ` (${area.widthMeters}x${area.lengthMeters}m)` : '');
+        const labelStr = area.code ? `[${area.code}] ${area.name}${dimStr}` : `${area.name}${dimStr}`;
+        drawLabelBadge(ctx, cx, cy, labelStr, strokeColor, undefined, iconScale, false);
       }
       ctx.restore();
     });

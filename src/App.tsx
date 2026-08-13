@@ -41,6 +41,7 @@ import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { ScheduleProgressModal } from './components/ScheduleProgressModal';
 import { MemoriaCalculoModal } from './components/MemoriaCalculoModal';
 import { AiRecognitionModal } from './components/AiRecognitionModal';
+import { normalizeLayer } from './utils/layerUtils';
 import { CollapsibleModule } from './components/CollapsibleModule';
 
 import { 
@@ -627,7 +628,7 @@ export default function App() {
       }
     }
 
-    setElements(prev => prev.map(e => e.id === mergedElement.id ? mergedElement : e));
+    setElements(prev => prev.some(e => e.id === mergedElement.id) ? prev.map(e => e.id === mergedElement.id ? mergedElement : e) : [...prev, mergedElement]);
     if (inspectedElement && inspectedElement.id === mergedElement.id) {
       setInspectedElement(mergedElement);
     }
@@ -1507,44 +1508,75 @@ export default function App() {
               onDeleteElement={handleDeleteElement}
               onDeleteAllElements={handleDeleteAllElements}
               onLocateElement={handleLocateElement}
+              activeLayer={activeLayer}
+              onActiveLayerChange={setActiveLayer}
               onAddTramo={() => {
-                const lineCount = elements.filter(e => e.type === 'line').length + 1;
-                const isElect = activeLayer === 'electrica';
-                const label = isElect ? `Circuito C-${String(lineCount).padStart(2, '0')}` : `Tramo T-${String(lineCount).padStart(2, '0')}`;
+                const lineCount = elements.filter(e => e.type === 'line' && normalizeLayer(e.layer) === 'civil').length + 1;
                 const newEl: InspectionElement = {
                   id: Date.now() + Math.floor(Math.random() * 100000),
                   type: 'line',
-                  layer: activeLayer,
-                  label,
+                  layer: 'civil',
+                  label: `Tramo T-${String(lineCount).padStart(2, '0')}`,
                   status: 'Pendiente',
                   x: 200,
                   y: 200,
                   x2: 350,
                   y2: 200,
                   meters: 25,
-                  pipes: isElect ? 'Ducto EMT Ø 1 1/2"' : '6x6" PVC Schedule 40',
-                  cables: isElect ? '3#8 AWG THHN + 1#10T' : '3#250 F+1#500N+1#6T',
-                  circuitTag: isElect ? 'CIR-FUERZA-01' : undefined,
+                  pipes: '6x6" PVC Schedule 40',
+                  cables: '3#250 F+1#500N+1#6T',
                   date: new Date().toISOString().split('T')[0]
                 };
                 handleAddElement(newEl);
               }}
               onAddCamera={() => {
-                const isElect = activeLayer === 'electrica';
-                const camLabel = isElect ? `TD-${String(camCounter).padStart(2, '0')}` : `${camPrefix}${String(camCounter).padStart(2, '0')}`;
                 const newEl: InspectionElement = {
                   id: Date.now() + Math.floor(Math.random() * 100000),
                   type: 'camera',
-                  layer: activeLayer,
-                  label: camLabel,
+                  layer: 'civil',
+                  label: `${camPrefix}${String(camCounter).padStart(2, '0')}`,
                   status: 'Pendiente',
                   x: 300,
                   y: 300,
                   camType: camDefaultType,
-                  electricNodeType: isElect ? 'tablero' : undefined,
-                  circuitTag: isElect ? 'ALIM-220V' : undefined,
+                  date: new Date().toISOString().split('T')[0]
+                };
+                handleAddElement(newEl);
+              }}
+              onAddElectricalNode={() => {
+                const nodeCount = elements.filter(e => e.type === 'camera' && normalizeLayer(e.layer) === 'electrica').length + 1;
+                const newEl: InspectionElement = {
+                  id: Date.now() + Math.floor(Math.random() * 100000),
+                  type: 'camera',
+                  layer: 'electrica',
+                  label: `TD-${String(nodeCount).padStart(2, '0')}`,
+                  status: 'Pendiente',
+                  x: 300,
+                  y: 300,
+                  electricNodeType: 'tablero',
+                  circuitTag: 'ALIM-220V',
                   voltage: 220,
                   signalStrength: 95,
+                  date: new Date().toISOString().split('T')[0]
+                };
+                handleAddElement(newEl);
+              }}
+              onAddElectricalCircuit={() => {
+                const circCount = elements.filter(e => e.type === 'line' && normalizeLayer(e.layer) === 'electrica').length + 1;
+                const newEl: InspectionElement = {
+                  id: Date.now() + Math.floor(Math.random() * 100000),
+                  type: 'line',
+                  layer: 'electrica',
+                  label: `Circuito C-${String(circCount).padStart(2, '0')}`,
+                  status: 'Pendiente',
+                  x: 200,
+                  y: 200,
+                  x2: 350,
+                  y2: 200,
+                  meters: 30,
+                  pipes: 'Ducto EMT Ø 1 1/2"',
+                  cables: '3#8 AWG Cu THHN + 1#10T',
+                  circuitTag: `CIR-ALUM-${String(circCount).padStart(2, '0')}`,
                   date: new Date().toISOString().split('T')[0]
                 };
                 handleAddElement(newEl);

@@ -33,10 +33,14 @@ interface BitacoraTableProps {
   onLocateElement: (element: InspectionElement) => void;
   onAddTramo: () => void;
   onAddCamera: () => void;
+  onAddElectricalNode?: () => void;
+  onAddElectricalCircuit?: () => void;
   onInspectElement: (element: InspectionElement) => void;
   getAreaNameForElement: (element: InspectionElement) => string;
   globalConfig?: GlobalConfig;
   appMode?: 'admin' | 'field';
+  activeLayer?: ProjectLayer;
+  onActiveLayerChange?: (layer: ProjectLayer) => void;
 }
 
 export const BitacoraTable: React.FC<BitacoraTableProps> = ({
@@ -49,10 +53,14 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
   onLocateElement,
   onAddTramo,
   onAddCamera,
+  onAddElectricalNode,
+  onAddElectricalCircuit,
   onInspectElement,
   getAreaNameForElement,
   globalConfig,
-  appMode = 'admin'
+  appMode = 'admin',
+  activeLayer = 'civil',
+  onActiveLayerChange
 }) => {
   const [contractItems, setContractItems] = useState<ContractualItem[]>([]);
   const [viewMode, setViewMode] = useState<'cards' | 'table'>(() => 
@@ -126,11 +134,24 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
     return 'bg-slate-100 text-slate-700 border-slate-300';
   };
 
+  const effectiveLayer: ProjectLayer = (filter.layerFilter && filter.layerFilter !== 'all')
+    ? normalizeLayer(filter.layerFilter)
+    : normalizeLayer(activeLayer);
+
+  const isCivilLayer = effectiveLayer === 'civil';
+  const isElectricLayer = effectiveLayer === 'electrica';
+
   const countAll = elements.length;
   const countCivil = elements.filter(e => normalizeLayer(e.layer) === 'civil').length;
   const countElectrica = elements.filter(e => normalizeLayer(e.layer) === 'electrica').length;
-  const countCameras = elements.filter(e => e.type === 'camera').length;
-  const countTramos = elements.filter(e => e.type === 'line').length;
+
+  const layerScopedElements = (!filter.layerFilter || filter.layerFilter === 'all')
+    ? elements
+    : elements.filter(e => normalizeLayer(e.layer) === filter.layerFilter);
+
+  const tabCountAll = layerScopedElements.length;
+  const tabCountCameras = layerScopedElements.filter(e => e.type === 'camera').length;
+  const tabCountTramos = layerScopedElements.filter(e => e.type === 'line').length;
 
   const handleAddElectricalNode = () => {
     const nodeCount = elements.filter(e => e.type === 'camera' && normalizeLayer(e.layer) === 'electrica').length + 1;
@@ -180,59 +201,69 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
             <ClipboardList className="w-4 h-4 text-sky-600" />
             <span>Bitácora de Inspección Multicapa</span>
           </h2>
-          <p className="text-xs text-slate-400">Obras Civiles y Obras Eléctricas integradas</p>
+          <p className="text-xs text-slate-400">
+            {isElectricLayer ? 'Obras Eléctricas activas (Nodos y Circuitos)' : 'Obras Civiles activas (Cámaras y Tramos)'}
+          </p>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
           {appMode === 'admin' && elements.length > 0 && onDeleteAllElements && (
             <button
               onClick={onDeleteAllElements}
               className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs transition"
-              title="Borrar todos los tramos y cámaras de la bitácora y del plano"
+              title={isElectricLayer ? "Borrar todos los circuitos y nodos de la bitácora" : "Borrar todos los tramos y cámaras de la bitácora"}
             >
               <Trash2 className="w-3.5 h-3.5 text-rose-600" />
               <span>Borrar Todo</span>
             </button>
           )}
 
-          {/* Civil Adders */}
-          <div className="flex items-center rounded-lg border border-amber-300 bg-amber-50/70 p-0.5 shadow-2xs gap-0.5">
-            <button
-              onClick={onAddCamera}
-              className="bg-amber-600 hover:bg-amber-500 text-white px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
-              title="Agregar Cámara / Caja de Inspección Civil"
-            >
-              <Plus className="w-3 h-3" />
-              <span>Cámara</span>
-            </button>
-            <button
-              onClick={onAddTramo}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
-              title="Agregar Tramo de Canalización Civil"
-            >
-              <Plus className="w-3 h-3" />
-              <span>Tramo</span>
-            </button>
-          </div>
+          {/* Civil Adders: Mostrar Cámaras y Tramos solo en Capa Civil */}
+          {isCivilLayer && (
+            <div className="flex items-center rounded-lg border border-amber-300 bg-amber-50/70 p-0.5 shadow-2xs gap-0.5">
+              <button
+                type="button"
+                onClick={onAddCamera}
+                className="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
+                title="Agregar Cámara / Caja de Inspección Civil"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Cámara</span>
+              </button>
+              <button
+                type="button"
+                onClick={onAddTramo}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
+                title="Agregar Tramo de Canalización Civil"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Tramo</span>
+              </button>
+            </div>
+          )}
 
-          {/* Electric Adders */}
-          <div className="flex items-center rounded-lg border border-cyan-400 bg-cyan-50/70 p-0.5 shadow-2xs gap-0.5">
-            <button
-              onClick={handleAddElectricalNode}
-              className="bg-cyan-700 hover:bg-cyan-600 text-white px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
-              title="Agregar Nodo Eléctrico (Tablero / Transformador / Luminaria)"
-            >
-              <Zap className="w-3 h-3 text-amber-300" />
-              <span>Nodo Eléc.</span>
-            </button>
-            <button
-              onClick={handleAddElectricalCircuit}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
-              title="Agregar Circuito / Conductor Eléctrico"
-            >
-              <Plus className="w-3 h-3" />
-              <span>Circuito</span>
-            </button>
-          </div>
+          {/* Electric Adders: En capa eléctrica oculta Cámara/Tramo y muestra Nodo y Circuito */}
+          {isElectricLayer && (
+            <div className="flex items-center rounded-lg border border-cyan-400 bg-cyan-50/70 p-0.5 shadow-2xs gap-0.5">
+              <button
+                type="button"
+                onClick={onAddElectricalNode || handleAddElectricalNode}
+                className="bg-cyan-700 hover:bg-cyan-600 text-white px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
+                title="Agregar Nodo Eléctrico (Tablero / Transformador / Luminaria)"
+              >
+                <Zap className="w-3 h-3 text-amber-300" />
+                <span>Nodo</span>
+              </button>
+              <button
+                type="button"
+                onClick={onAddElectricalCircuit || handleAddElectricalCircuit}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
+                title="Agregar Circuito / Conductor Eléctrico"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Circuito</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -255,9 +286,12 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => onFilterChange({ ...filter, layerFilter: 'civil' })}
+            onClick={() => {
+              onFilterChange({ ...filter, layerFilter: 'civil' });
+              if (onActiveLayerChange) onActiveLayerChange('civil');
+            }}
             className={`px-3 py-1 rounded-lg font-extrabold transition flex items-center gap-1.5 ${
-              filter.layerFilter === 'civil'
+              filter.layerFilter === 'civil' || (!filter.layerFilter && activeLayer === 'civil')
                 ? 'bg-amber-500 text-slate-950 shadow-sm font-black'
                 : 'text-amber-300 hover:bg-amber-950/50'
             }`}
@@ -266,9 +300,12 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => onFilterChange({ ...filter, layerFilter: 'electrica' })}
+            onClick={() => {
+              onFilterChange({ ...filter, layerFilter: 'electrica' });
+              if (onActiveLayerChange) onActiveLayerChange('electrica');
+            }}
             className={`px-3 py-1 rounded-lg font-extrabold transition flex items-center gap-1.5 ${
-              filter.layerFilter === 'electrica'
+              filter.layerFilter === 'electrica' || (!filter.layerFilter && activeLayer === 'electrica')
                 ? 'bg-cyan-400 text-slate-950 shadow-sm font-black'
                 : 'text-cyan-300 hover:bg-cyan-950/50'
             }`}
@@ -287,7 +324,7 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
               filter.activeTab === 'all' ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-600 hover:bg-white/60'
             }`}
           >
-            Todos ({countAll})
+            Todos ({tabCountAll})
           </button>
           <button
             onClick={() => onFilterChange({ ...filter, activeTab: 'camera' })}
@@ -295,8 +332,22 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
               filter.activeTab === 'camera' ? 'bg-white text-rose-700 shadow-sm' : 'text-slate-600 hover:bg-white/60'
             }`}
           >
-            <MapPin className="w-3.5 h-3.5 text-rose-500" />
-            <span>Cámaras / Nodos ({countCameras})</span>
+            {isElectricLayer ? (
+              <>
+                <Zap className="w-3.5 h-3.5 text-cyan-600" />
+                <span>Nodos ({tabCountCameras})</span>
+              </>
+            ) : isCivilLayer ? (
+              <>
+                <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                <span>Cámaras ({tabCountCameras})</span>
+              </>
+            ) : (
+              <>
+                <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                <span>Cámaras / Nodos ({tabCountCameras})</span>
+              </>
+            )}
           </button>
           <button
             onClick={() => onFilterChange({ ...filter, activeTab: 'line' })}
@@ -304,8 +355,22 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
               filter.activeTab === 'line' ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-600 hover:bg-white/60'
             }`}
           >
-            <Ruler className="w-3.5 h-3.5 text-sky-600" />
-            <span>Tramos / Circuitos ({countTramos})</span>
+            {isElectricLayer ? (
+              <>
+                <Ruler className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Circuitos ({tabCountTramos})</span>
+              </>
+            ) : isCivilLayer ? (
+              <>
+                <Ruler className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Tramos ({tabCountTramos})</span>
+              </>
+            ) : (
+              <>
+                <Ruler className="w-3.5 h-3.5 text-sky-600" />
+                <span>Tramos / Circuitos ({tabCountTramos})</span>
+              </>
+            )}
           </button>
         </div>
 

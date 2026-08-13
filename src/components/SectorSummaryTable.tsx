@@ -89,7 +89,7 @@ export const SectorSummaryTable: React.FC<SectorSummaryTableProps> = ({
       id: area.id,
       code: area.code,
       name: area.name,
-      colorStroke: area.color.stroke,
+      colorStroke: (typeof area.color === 'object' && area.color?.stroke) ? area.color.stroke : (typeof area.color === 'string' ? area.color : '#9333ea'),
       widthMeters: area.widthMeters,
       lengthMeters: area.lengthMeters,
       calculatedAreaM2: area.calculatedAreaM2,
