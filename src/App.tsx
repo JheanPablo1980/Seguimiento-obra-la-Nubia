@@ -787,13 +787,12 @@ export default function App() {
     setActiveTab('planos');
     setFieldMobileTab('canvas');
     setCollapsedModules(prev => ({ ...prev, canvas: false }));
-    setZoomLevel(1.8);
     setInspectedElement(element);
     const targetLayer = normalizeLayer(element.layer);
     if (targetLayer !== activeLayer) {
       setActiveLayer(targetLayer);
     }
-    showToast(`Ubicando ${element.label} en el plano`);
+    showToast(`Ampliando y ubicando ${element.label} en detalle`);
   };
 
   // Inspect element on canvas: stays on the plan, opens inspector sheet/drawer directly, and seamlessly updates
@@ -803,7 +802,7 @@ export default function App() {
     if (targetLayer !== activeLayer) {
       setActiveLayer(targetLayer);
     }
-    showToast(`Elemento ${element.label} seleccionado`);
+    showToast(`Elemento ${element.label} ampliado en detalle`);
   };
 
   // Select element from canvas and navigate smoothly to Bitacora (DWG Fast View mode)

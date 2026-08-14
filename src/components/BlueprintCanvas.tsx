@@ -9,6 +9,7 @@ import { Plus, Minus, Ruler } from 'lucide-react';
 export interface BlueprintCanvasRef {
   exportAnnotatedBlueprintPNG: (projectMeta?: ProjectMeta) => void;
   resetView: () => void;
+  focusElement: (elementId: number, targetZoom?: number) => void;
 }
 
 interface BlueprintCanvasProps {
@@ -1223,6 +1224,241 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     link.click();
   }, [blueprintImg, areas, strokes, elements, isElementVisible, drawLabelBadge, drawCameraBadge, drawElectricNodeBadge, drawLineElement, iconScale]);
 
+  // Selected Element Rich Detail Callout Card overlay directly on the canvas
+  const drawSelectedElementDetailCard = useCallback((
+    ctx: CanvasRenderingContext2D,
+    el: InspectionElement,
+    scale: number = 1.6
+  ) => {
+    ctx.save();
+    const isElectric = normalizeLayer(el.layer) === 'electrica';
+    
+    // Position of the callout box
+    let originX = el.x;
+    let originY = el.y;
+    if (el.type === 'line' && el.x2 !== undefined && el.y2 !== undefined) {
+      originX = (el.x + el.x2) / 2;
+      originY = (el.y + el.y2) / 2;
+    }
+
+    const cardW = Math.max(220, 240 * (scale * 0.55));
+    const cardH = el.type === 'camera' ? Math.max(105, 115 * (scale * 0.55)) : Math.max(120, 130 * (scale * 0.55));
+    const cardX = originX - cardW / 2;
+    const cardY = originY - cardH - (24 * scale);
+
+    // Callout pointer arrow
+    ctx.beginPath();
+    ctx.moveTo(originX - 10 * (scale * 0.5), cardY + cardH);
+    ctx.lineTo(originX, originY - 10 * (scale * 0.5));
+    ctx.lineTo(originX + 10 * (scale * 0.5), cardY + cardH);
+    ctx.closePath();
+    ctx.fillStyle = isElectric ? 'rgba(8, 20, 44, 0.98)' : 'rgba(15, 23, 42, 0.98)';
+    ctx.fill();
+    ctx.strokeStyle = isElectric ? '#06b6d4' : '#f59e0b';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Callout Card Box with rounded corners and drop shadow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
+    ctx.shadowBlur = 18;
+    ctx.shadowOffsetY = 6;
+
+    ctx.beginPath();
+    ctx.roundRect(cardX, cardY, cardW, cardH, 8);
+    ctx.fillStyle = isElectric ? 'rgba(8, 20, 44, 0.96)' : 'rgba(15, 23, 42, 0.96)';
+    ctx.fill();
+
+    // Reset shadow
+    ctx.shadowColor = 'transparent';
+
+    // Border
+    ctx.strokeStyle = isElectric ? '#06b6d4' : '#f59e0b';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Header strip with status color
+    const statusColor = el.status === 'Terminado' ? '#10b981' : (el.status === 'En proceso' ? '#38bdf8' : '#f59e0b');
+    ctx.fillStyle = statusColor;
+    ctx.beginPath();
+    ctx.roundRect(cardX + 1, cardY + 1, cardW - 2, 4, [6, 6, 0, 0]);
+    ctx.fill();
+
+    // Text details
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+
+    // Title / Label
+    ctx.font = `bold ${Math.max(13, Math.round(13 * (scale * 0.55)))}px Inter, system-ui, sans-serif`;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(el.label, cardX + 12, cardY + 20);
+
+    // Status pill on the top right
+    const statusText = el.status || 'Pendiente';
+    ctx.font = `bold ${Math.max(10, Math.round(10 * (scale * 0.55)))}px Inter, sans-serif`;
+    const stMetrics = ctx.measureText(statusText);
+    const pillW = stMetrics.width + 16;
+    const pillH = 18;
+    const pillX = cardX + cardW - pillW - 10;
+    const pillY = cardY + 11;
+
+    ctx.beginPath();
+    ctx.roundRect(pillX, pillY, pillW, pillH, 9);
+    ctx.fillStyle = `${statusColor}28`;
+    ctx.fill();
+    ctx.strokeStyle = statusColor;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = statusColor;
+    ctx.fillText(statusText, pillX + 8, pillY + pillH / 2);
+
+    // Divider line
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cardX + 10, cardY + 36);
+    ctx.lineTo(cardX + cardW - 10, cardY + 36);
+    ctx.stroke();
+
+    // Sub details
+    ctx.font = `500 ${Math.max(10, Math.round(10 * (scale * 0.55)))}px Inter, system-ui, sans-serif`;
+    let curY = cardY + 50;
+    const lineSpacing = 16;
+
+    if (el.type === 'camera') {
+      const typeDesc = isElectric 
+        ? (el.electricNodeType ? el.electricNodeType.replace(/_/g, ' ').toUpperCase() : 'NODO ELÉCTRICO') 
+        : (el.camType || 'CÁMARA SB');
+      ctx.fillStyle = isElectric ? '#67e8f9' : '#fbbf24';
+      ctx.fillText(`📐 ${typeDesc}`, cardX + 12, curY);
+      curY += lineSpacing;
+
+      if (el.circuitTag || el.cables) {
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText(`⚡ Circuito: ${el.circuitTag || el.cables || 'General'}`, cardX + 12, curY);
+        curY += lineSpacing;
+      }
+    } else {
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillText(`📏 Longitud: ${el.meters || 0} metros`, cardX + 12, curY);
+      curY += lineSpacing;
+
+      if (el.pipes) {
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillText(`🏗️ Tubo: ${el.pipes}`, cardX + 12, curY);
+        curY += lineSpacing;
+      }
+      if (el.cables) {
+        ctx.fillStyle = '#a78bfa';
+        ctx.fillText(`⚡ Cable: ${el.cables}`, cardX + 12, curY);
+        curY += lineSpacing;
+      }
+    }
+
+    // Photo count badge if photos exist
+    const photoRecords = getElementPhotoRecords(el);
+    const photoCount = photoRecords.length;
+    if (photoCount > 0) {
+      ctx.fillStyle = '#34d399';
+      ctx.font = `bold ${Math.max(9, Math.round(9 * (scale * 0.55)))}px monospace`;
+      ctx.fillText(`📸 ${photoCount} foto${photoCount > 1 ? 's' : ''} adjunta${photoCount > 1 ? 's' : ''}`, cardX + 12, cardY + cardH - 12);
+    }
+
+    ctx.restore();
+  }, []);
+
+  // Smooth Focus & Auto-Zoom to Element Animation
+  const animationFrameRef = useRef<number | null>(null);
+  const lastFocusedElementIdRef = useRef<number | null>(null);
+
+  const focusAndZoomElement = useCallback((targetEl: InspectionElement, customZoom?: number) => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas && !container) return;
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    const currentW = canvas?.width || container?.clientWidth || 1000;
+    const currentH = canvas?.height || container?.clientHeight || 650;
+
+    // Calculate center point of target element
+    let cx = targetEl.x;
+    let cy = targetEl.y;
+    if (targetEl.type === 'line' && targetEl.x2 !== undefined && targetEl.y2 !== undefined) {
+      cx = (targetEl.x + targetEl.x2) / 2;
+      cy = (targetEl.y + targetEl.y2) / 2;
+    }
+
+    // Target zoom: at least 2.2x to clearly inspect name, specs, and details
+    const targetZoom = customZoom ?? Math.max(zoomLevel, 2.2);
+
+    // Target Pan offsets to center the element smoothly
+    const targetPanX = (currentW / 2) - (cx * targetZoom);
+    const targetPanY = (currentH / 2) - (cy * targetZoom);
+
+    const startPanX = panX;
+    const startPanY = panY;
+    const startZoom = zoomLevel;
+    const startTime = performance.now();
+    const duration = 380; // ms easing duration
+
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const step = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / duration);
+      const eased = easeOutCubic(progress);
+
+      const currentPanX = startPanX + (targetPanX - startPanX) * eased;
+      const currentPanY = startPanY + (targetPanY - startPanY) * eased;
+      const currentZoom = startZoom + (targetZoom - startZoom) * eased;
+
+      setPanX(currentPanX);
+      setPanY(currentPanY);
+      if (onZoomChange && Math.abs(currentZoom - zoomLevel) > 0.01) {
+        onZoomChange(Number(currentZoom.toFixed(2)));
+      }
+
+      if (progress < 1) {
+        animationFrameRef.current = requestAnimationFrame(step);
+      } else {
+        setPanX(targetPanX);
+        setPanY(targetPanY);
+        if (onZoomChange) {
+          onZoomChange(Number(targetZoom.toFixed(2)));
+        }
+        animationFrameRef.current = null;
+      }
+    };
+
+    animationFrameRef.current = requestAnimationFrame(step);
+  }, [panX, panY, zoomLevel, onZoomChange]);
+
+  // Automatically zoom and center when selectedElementId changes
+  useEffect(() => {
+    if (selectedElementId && selectedElementId !== lastFocusedElementIdRef.current) {
+      lastFocusedElementIdRef.current = selectedElementId;
+      const targetEl = elements.find(e => e.id === selectedElementId);
+      if (targetEl) {
+        focusAndZoomElement(targetEl);
+      }
+    } else if (!selectedElementId) {
+      lastFocusedElementIdRef.current = null;
+    }
+  }, [selectedElementId, elements, focusAndZoomElement]);
+
+  // Clean up animation on unmount
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, []);
+
   // View resetting callback
   const resetView = useCallback(() => {
     setPanX(0);
@@ -1236,8 +1472,12 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
   useImperativeHandle(ref, () => ({
     exportAnnotatedBlueprintPNG,
-    resetView
-  }), [exportAnnotatedBlueprintPNG, resetView]);
+    resetView,
+    focusElement: (elementId: number, targetZoom?: number) => {
+      const el = elements.find(e => e.id === elementId);
+      if (el) focusAndZoomElement(el, targetZoom);
+    }
+  }), [exportAnnotatedBlueprintPNG, resetView, elements, focusAndZoomElement]);
 
   // Redraw canvas
   const redraw = useCallback(() => {
@@ -1598,6 +1838,9 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           ctx.stroke();
         }
         ctx.restore();
+
+        // Prominent interactive detail card directly on the zoomed blueprint
+        drawSelectedElementDetailCard(ctx, selectedEl, iconScale);
       }
     }
 
@@ -1650,6 +1893,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     drawElectricNodeBadge,
     drawLineElement,
     drawLabelBadge,
+    drawSelectedElementDetailCard,
     iconScale,
     hoveredElementInfo,
     isDraggingElement,
