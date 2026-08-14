@@ -34,6 +34,8 @@ interface BlueprintCanvasProps {
   camCounter: number;
   camDefaultType: CameraNorm;
   isLocked?: boolean;
+  canMoveElements?: boolean;
+  appMode?: 'admin' | 'field';
   selectedElementId?: number | null;
   statusFilter?: 'all' | StatusType;
   // Area drawing state
@@ -69,6 +71,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   camCounter,
   camDefaultType,
   isLocked = false,
+  canMoveElements = true,
+  appMode = 'admin',
   selectedElementId,
   statusFilter = 'all',
   currentAreaPoints,
@@ -82,6 +86,9 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Determine if element coordinate alterations and drawing modifications are allowed
+  const isMovementAllowed = !isLocked && (canMoveElements ?? (appMode === 'admin'));
 
   // Pan State
   const [panX, setPanX] = useState(0);
@@ -1594,6 +1601,31 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       }
     }
 
+    // 10. Highlight Pending Elements Beacon (when statusFilter is 'Pendiente')
+    if (statusFilter === 'Pendiente') {
+      activeElements.filter(e => e.status === 'Pendiente' && e.id !== selectedElementId).forEach(el => {
+        ctx.save();
+        if (el.type === 'camera') {
+          const rad = Math.max((el.size || 10) + 6, 18) * iconScale;
+          ctx.beginPath();
+          ctx.arc(el.x, el.y, rad + 4 * iconScale, 0, Math.PI * 2);
+          ctx.strokeStyle = '#f43f5e';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 4]);
+          ctx.stroke();
+        } else if (el.type === 'line' && el.x2 !== undefined && el.y2 !== undefined) {
+          ctx.beginPath();
+          ctx.moveTo(el.x, el.y);
+          ctx.lineTo(el.x2, el.y2);
+          ctx.strokeStyle = 'rgba(244, 63, 94, 0.4)';
+          ctx.lineWidth = Math.max(10, 14 * iconScale);
+          ctx.lineCap = 'round';
+          ctx.stroke();
+        }
+        ctx.restore();
+      });
+    }
+
     ctx.restore();
   }, [
     blueprintImg,
@@ -1610,6 +1642,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     elements,
     isElementVisible,
     activeLayer,
+    layerVisibility,
     showLineLabels,
     showCameraLabels,
     showSpecsLabels,
@@ -1624,14 +1657,15 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     statusFilter
   ]);
 
-  // Find camera or line hit part at canvas coordinate (respecting visible elements only, prioritizing active layer)
+  // Find camera or line hit part at canvas coordinate (respecting visible elements only, prioritizing active layer & statusFilter)
   const findHitPart = useCallback((x: number, y: number): { element: InspectionElement; part: 'camera' | 'line-start' | 'line-end' | 'line-body' } | null => {
     const visibleElements = elements.filter(isElementVisible);
     const activeNormalized = normalizeLayer(activeLayer);
 
-    // Sort visible elements so active layer elements are tested first
+    // Sort visible elements so active layer & status filtered elements are tested first
     const sortedElements = [
-      ...visibleElements.filter(e => normalizeLayer(e.layer) === activeNormalized),
+      ...visibleElements.filter(e => normalizeLayer(e.layer) === activeNormalized && (statusFilter === 'all' || e.status === statusFilter)),
+      ...visibleElements.filter(e => normalizeLayer(e.layer) === activeNormalized && statusFilter !== 'all' && e.status !== statusFilter),
       ...visibleElements.filter(e => normalizeLayer(e.layer) !== activeNormalized)
     ];
 
@@ -1662,7 +1696,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       }
     }
     return null;
-  }, [elements, iconScale, isElementVisible, activeLayer]);
+  }, [elements, iconScale, isElementVisible, activeLayer, statusFilter]);
 
   useEffect(() => {
     redraw();
@@ -1783,15 +1817,15 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
       setIsPanning(true);
       startPanRef.current = { x: pos.rawX - panX, y: pos.rawY - panY };
-    } else if (currentTool === 'highlight' && !isLocked) {
+    } else if (currentTool === 'highlight' && isMovementAllowed) {
       setIsDrawing(true);
       currentPathRef.current = [{ x: pos.x, y: pos.y }];
-    } else if (currentTool === 'straight' && !isLocked) {
+    } else if (currentTool === 'straight' && isMovementAllowed) {
       setIsDrawing(true);
       straightLineStartRef.current = { x: pos.x, y: pos.y };
       straightLinePreviewRef.current = { x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y };
       redraw();
-    } else if (currentTool === 'camera' && !isLocked) {
+    } else if (currentTool === 'camera' && isMovementAllowed) {
       const camLabel = `${camPrefix}${String(camCounter).padStart(2, '0')}`;
       const isElectric = activeLayer === 'electrica';
       
@@ -1826,7 +1860,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         date: new Date().toISOString().split('T')[0]
       };
       onAddElement(newEl);
-    } else if (currentTool === 'area' && !isLocked) {
+    } else if (currentTool === 'area' && isMovementAllowed) {
       if (currentAreaPoints.length >= 3) {
         const startPt = currentAreaPoints[0];
         const distToStart = Math.hypot(pos.x - startPt.x, pos.y - startPt.y);
@@ -1836,7 +1870,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         }
       }
       onAddAreaPoint({ x: pos.x, y: pos.y });
-    } else if (currentTool === 'eraser' && !isLocked) {
+    } else if (currentTool === 'eraser' && isMovementAllowed) {
       setIsDrawing(true);
       onEraseAt({ x: pos.x, y: pos.y });
     }
@@ -1845,7 +1879,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   const handleMouseMove = (clientX: number, clientY: number) => {
     const pos = getCanvasCoords(clientX, clientY);
 
-    if (currentTool === 'area') {
+    if (currentTool === 'area' && isMovementAllowed) {
       setAreaMousePos({ x: pos.x, y: pos.y });
     }
 
@@ -1855,16 +1889,27 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       const dx = pos.x - drag.startCanvasPos.x;
       const dy = pos.y - drag.startCanvasPos.y;
 
-      if (!isLocked && Math.hypot(dx, dy) > 3) {
+      if (Math.hypot(dx, dy) > 4) {
         drag.hasMoved = true;
       }
       
-      if (!isLocked) {
+      if (isMovementAllowed) {
         drag.currentDx = dx;
         drag.currentDy = dy;
+        redraw();
+        return;
+      } else {
+        // Inspector Mode: Element cannot be moved by inspector.
+        // Convert gesture into smooth canvas panning so inspector navigates effortlessly.
+        if (!isPanning) {
+          setIsPanning(true);
+          startPanRef.current = { x: pos.rawX - panX, y: pos.rawY - panY };
+        }
+        setPanX(pos.rawX - startPanRef.current.x);
+        setPanY(pos.rawY - startPanRef.current.y);
+        redraw();
+        return;
       }
-      redraw();
-      return;
     }
 
     // Hover detection for pan mode
@@ -1880,10 +1925,10 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     if (isPanning && currentTool === 'pan') {
       setPanX(pos.rawX - startPanRef.current.x);
       setPanY(pos.rawY - startPanRef.current.y);
-    } else if (isDrawing && currentTool === 'highlight') {
+    } else if (isDrawing && currentTool === 'highlight' && isMovementAllowed) {
       currentPathRef.current.push({ x: pos.x, y: pos.y });
       redraw();
-    } else if (isDrawing && currentTool === 'straight' && straightLineStartRef.current) {
+    } else if (isDrawing && currentTool === 'straight' && straightLineStartRef.current && isMovementAllowed) {
       straightLinePreviewRef.current = {
         x1: straightLineStartRef.current.x,
         y1: straightLineStartRef.current.y,
@@ -1891,7 +1936,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         y2: pos.y
       };
       redraw();
-    } else if (isDrawing && currentTool === 'eraser') {
+    } else if (isDrawing && currentTool === 'eraser' && isMovementAllowed) {
       onEraseAt({ x: pos.x, y: pos.y });
     }
   };
@@ -1905,8 +1950,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         if (hitEl) {
           onInspectElement(hitEl);
         }
-      } else if (onUpdateElement) {
-        // Apply final position update
+      } else if (isMovementAllowed && onUpdateElement) {
+        // Apply final position update ONLY when movement is allowed (Admin role)
         const targetEl = elements.find(e => e.id === drag.id);
         if (targetEl) {
           const updated: InspectionElement = { ...targetEl };
@@ -1998,13 +2043,13 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
   const getCursorClass = () => {
     if (currentTool === 'pan') {
-      if (isDraggingElement) return 'cursor-grabbing';
-      if (hoveredElementInfo) return 'cursor-grab';
+      if (isDraggingElement && isMovementAllowed) return 'cursor-grabbing';
+      if (hoveredElementInfo) return isMovementAllowed ? 'cursor-grab' : 'cursor-pointer';
       return isPanning ? 'cursor-grabbing' : 'cursor-grab';
     }
-    if (currentTool === 'highlight' || currentTool === 'straight') return 'cursor-crosshair';
-    if (currentTool === 'camera') return 'cursor-cell';
-    if (currentTool === 'area') return 'cursor-crosshair';
+    if (currentTool === 'highlight' || currentTool === 'straight') return isMovementAllowed ? 'cursor-crosshair' : 'cursor-not-allowed';
+    if (currentTool === 'camera') return isMovementAllowed ? 'cursor-cell' : 'cursor-not-allowed';
+    if (currentTool === 'area') return isMovementAllowed ? 'cursor-crosshair' : 'cursor-not-allowed';
     if (currentTool === 'eraser') return 'cursor-not-allowed';
     return 'cursor-default';
   };
@@ -2041,8 +2086,16 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           </>
         )}
         <span className="text-slate-500">|</span>
-        <span className="text-slate-300 text-[11px]">
-          {currentTool === 'pan' ? 'Inspeccionar / Arrastrar' : (currentTool === 'straight' ? 'Trazar Línea' : (currentTool === 'camera' ? 'Colocar Nodo' : currentTool))}
+        <span className="text-slate-300 text-[11px] flex items-center gap-1">
+          {!isMovementAllowed ? (
+            <span className="text-amber-300 flex items-center gap-1 font-semibold">
+              <span>🔒</span> Geometría Protegida (Inspector)
+            </span>
+          ) : (
+            <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+              <span>✏️</span> {currentTool === 'pan' ? 'Reubicar Elementos' : (currentTool === 'straight' ? 'Trazar Línea' : (currentTool === 'camera' ? 'Colocar Nodo' : currentTool))}
+            </span>
+          )}
         </span>
       </div>
     </div>

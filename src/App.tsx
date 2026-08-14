@@ -1539,6 +1539,9 @@ export default function App() {
                     showToast(`Escala de íconos ajustada a ${s}x`);
                   }}
                   appMode={appMode}
+                  statusFilter={inspectorStatusFilter}
+                  onChangeStatusFilter={setInspectorStatusFilter}
+                  elements={elements}
                   onOpenAiRecognition={() => setIsAiModalOpen(true)}
                   onToggleFullscreen={() => setIsCanvasFullscreen(f => !f)}
                   isFullscreen={isCanvasFullscreen}
@@ -1566,6 +1569,8 @@ export default function App() {
                     camCounter={camCounter}
                     camDefaultType={camDefaultType}
                     isLocked={globalConfig.lockBlueprintLayout}
+                    canMoveElements={appMode === 'admin' && !globalConfig.lockBlueprintLayout}
+                    appMode={appMode}
                     selectedElementId={inspectedElement?.id ?? null}
                     statusFilter={inspectorStatusFilter}
                     currentAreaPoints={currentAreaPoints}
@@ -1780,6 +1785,7 @@ export default function App() {
           areaName={getAreaNameForElement(inspectedElement)}
           allElements={elements}
           onSelectElement={setInspectedElement}
+          statusFilter={inspectorStatusFilter}
           onOpenFullTelemetry={() => setIsFullTelemetryOpen(true)}
           showToast={showToast}
           currentUser={currentUser}
@@ -1953,6 +1959,9 @@ export default function App() {
             showToast(`Capa activa: ${layer === 'civil' ? '🏗️ Obras Civiles' : '⚡ Obras Eléctricas'}`);
           }}
           selectedElement={inspectedElement}
+          statusFilter={inspectorStatusFilter}
+          onChangeStatusFilter={setInspectorStatusFilter}
+          pendingCount={elements.filter(e => e.layer === activeLayer && e.status === 'Pendiente').length}
           onOpenQuickEdit={() => {
             if (inspectedElement) setIsFullTelemetryOpen(true);
             else setIsQuickAddModalOpen(true);
@@ -2172,6 +2181,8 @@ export default function App() {
               camCounter={camCounter}
               camDefaultType={camDefaultType}
               isLocked={globalConfig.lockBlueprintLayout}
+              canMoveElements={appMode === 'admin' && !globalConfig.lockBlueprintLayout}
+              appMode={appMode}
               selectedElementId={inspectedElement?.id ?? null}
               statusFilter={inspectorStatusFilter}
               currentAreaPoints={currentAreaPoints}

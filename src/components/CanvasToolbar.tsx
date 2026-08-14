@@ -1,5 +1,5 @@
 import React from 'react';
-import { CameraNorm, ProjectLayer } from '../types';
+import { CameraNorm, ProjectLayer, StatusType, InspectionElement } from '../types';
 import { 
   Hand, 
   Highlighter, 
@@ -21,7 +21,11 @@ import {
   Sparkles,
   Zap,
   HardHat,
-  Boxes
+  Boxes,
+  AlertTriangle,
+  Activity,
+  ShieldCheck,
+  Filter
 } from 'lucide-react';
 import { ELECTRICAL_NODE_TYPES } from '../utils/layerUtils';
 
@@ -35,6 +39,10 @@ interface CanvasToolbarProps {
   onChangeActiveLayer?: (layer: ProjectLayer) => void;
   layerVisibility?: { civil: boolean; electrica: boolean };
   onToggleLayerVisibility?: (layer: ProjectLayer) => void;
+  // Status Filter
+  statusFilter?: 'all' | StatusType;
+  onChangeStatusFilter?: (status: 'all' | StatusType) => void;
+  elements?: InspectionElement[];
   // Area drawing controls
   areaPointCount: number;
   onUndoAreaPoint: () => void;
@@ -78,6 +86,9 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onChangeActiveLayer,
   layerVisibility = { civil: true, electrica: true },
   onToggleLayerVisibility,
+  statusFilter = 'all',
+  onChangeStatusFilter,
+  elements = [],
   areaPointCount,
   onUndoAreaPoint,
   onFinishArea,
@@ -110,6 +121,13 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   isFullscreen = false
 }) => {
   const isElectric = activeLayer === 'electrica';
+
+  // Calculate status counts for active layer
+  const layerElements = elements.filter(e => (e.layer || 'civil') === activeLayer);
+  const pendingCount = layerElements.filter(e => e.status === 'Pendiente').length;
+  const processCount = layerElements.filter(e => e.status === 'En proceso').length;
+  const doneCount = layerElements.filter(e => e.status === 'Terminado').length;
+  const totalCount = layerElements.length;
 
   return (
     <div className="flex flex-col gap-2">
@@ -551,6 +569,89 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           )}
         </div>
       </div>
+
+      {/* 4. STATUS FILTER BAR (SELECCIÓN Y REVISIÓN EN TERRENO) */}
+      {onChangeStatusFilter && (
+        <div className="flex items-center justify-between text-xs bg-slate-900 border border-slate-700/80 px-3 py-2 rounded-lg text-slate-300 no-print flex-wrap gap-2 shadow-xs">
+          <div className="flex items-center gap-1.5 font-bold text-slate-300 text-[11px]">
+            <Filter className="w-3.5 h-3.5 text-sky-400" />
+            <span className="hidden sm:inline">Inspeccionar en Plano:</span>
+            <span className="sm:hidden">Filtrar:</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Todos */}
+            <button
+              type="button"
+              onClick={() => onChangeStatusFilter('all')}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 border ${
+                statusFilter === 'all'
+                  ? 'bg-sky-600 text-white border-sky-400 shadow-sm'
+                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:bg-slate-700'
+              }`}
+            >
+              <span>Todos</span>
+              <span className="px-1.5 py-0.2 bg-slate-950/60 rounded-full text-[10px] font-mono">
+                {totalCount}
+              </span>
+            </button>
+
+            {/* Solo Pendientes (Highlighted for field inspection) */}
+            <button
+              type="button"
+              onClick={() => onChangeStatusFilter('Pendiente')}
+              className={`px-2.5 py-1 rounded-md text-xs font-black transition flex items-center gap-1.5 border ${
+                statusFilter === 'Pendiente'
+                  ? 'bg-gradient-to-r from-rose-600 to-amber-600 text-white border-amber-300 shadow-md ring-2 ring-amber-400/40 animate-pulse'
+                  : 'bg-slate-800 text-amber-300 border-amber-500/40 hover:bg-amber-950/40 hover:text-amber-200'
+              }`}
+              title="Filtrar el plano para ver e inspeccionar solo elementos Pendientes (tocar para editar estado y fotos)"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+              <span>Pendientes</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                statusFilter === 'Pendiente' ? 'bg-amber-950 text-amber-200' : 'bg-slate-950 text-amber-400'
+              }`}>
+                {pendingCount}
+              </span>
+            </button>
+
+            {/* En Proceso */}
+            <button
+              type="button"
+              onClick={() => onChangeStatusFilter('En proceso')}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 border ${
+                statusFilter === 'En proceso'
+                  ? 'bg-amber-600 text-white border-amber-400 shadow-sm'
+                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:bg-slate-700'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5 text-amber-400" />
+              <span>En Proceso</span>
+              <span className="px-1.5 py-0.2 bg-slate-950/60 rounded-full text-[10px] font-mono">
+                {processCount}
+              </span>
+            </button>
+
+            {/* Terminados */}
+            <button
+              type="button"
+              onClick={() => onChangeStatusFilter('Terminado')}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 border ${
+                statusFilter === 'Terminado'
+                  ? 'bg-emerald-600 text-white border-emerald-400 shadow-sm'
+                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:bg-slate-700'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Terminados</span>
+              <span className="px-1.5 py-0.2 bg-slate-950/60 rounded-full text-[10px] font-mono">
+                {doneCount}
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -31,6 +31,7 @@ interface MobileInspectorSheetProps {
   onClose: () => void;
   onUpdateElement: (updated: InspectionElement) => void;
   onSelectElement: (element: InspectionElement) => void;
+  statusFilter?: 'all' | StatusType;
   onOpenFullDetails?: () => void;
   onOpenFullTelemetry?: () => void;
   onDeleteElement?: (id: number) => void;
@@ -56,6 +57,7 @@ export const MobileInspectorSheet: React.FC<MobileInspectorSheetProps> = ({
   onClose,
   onUpdateElement,
   onSelectElement,
+  statusFilter = 'all',
   onOpenFullDetails,
   onOpenFullTelemetry,
   areaName = '',
@@ -69,8 +71,12 @@ export const MobileInspectorSheet: React.FC<MobileInspectorSheetProps> = ({
 
   if (!element) return null;
 
-  // Filter elements of the same layer for smooth next/previous stepping
-  const currentLayerElements = allElements.filter(e => (e.layer || 'civil') === (element.layer || 'civil'));
+  // Filter elements of the same layer (and optionally statusFilter) for smooth next/previous stepping
+  const currentLayerElements = allElements.filter(e => {
+    const matchesLayer = (e.layer || 'civil') === (element.layer || 'civil');
+    const matchesStatus = !statusFilter || statusFilter === 'all' || e.status === statusFilter;
+    return matchesLayer && matchesStatus;
+  });
   const currentIndex = currentLayerElements.findIndex(e => e.id === element.id);
   const prevElement = currentIndex > 0 ? currentLayerElements[currentIndex - 1] : null;
   const nextElement = currentIndex < currentLayerElements.length - 1 ? currentLayerElements[currentIndex + 1] : null;
@@ -328,6 +334,16 @@ export const MobileInspectorSheet: React.FC<MobileInspectorSheetProps> = ({
             </span>
           </div>
         </div>
+
+        {/* Pending Inspection Banner */}
+        {element.status === 'Pendiente' && (
+          <div className="p-2.5 bg-gradient-to-r from-rose-950/80 to-amber-950/80 border border-rose-700/60 rounded-xl flex items-center gap-2 text-xs text-amber-200">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span className="leading-snug">
+              <strong>Elemento Pendiente:</strong> Toca abajo para cambiar el estado (En Proceso / Terminado) y adjuntar fotos de terreno.
+            </span>
+          </div>
+        )}
 
         {/* 1. BIG TACTILE STATUS BUTTONS */}
         <div className="space-y-1.5">

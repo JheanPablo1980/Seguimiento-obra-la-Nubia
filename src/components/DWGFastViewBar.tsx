@@ -25,7 +25,7 @@ import {
   Shield,
   FileText
 } from 'lucide-react';
-import { ProjectLayer, InspectionElement, AuthUser, ProjectMeta } from '../types';
+import { ProjectLayer, InspectionElement, AuthUser, ProjectMeta, StatusType } from '../types';
 
 interface DWGFastViewBarProps {
   activeView: 'planos' | 'bitacora' | 'medir' | 'editar';
@@ -33,6 +33,9 @@ interface DWGFastViewBarProps {
   activeLayer: ProjectLayer;
   onChangeActiveLayer: (layer: ProjectLayer) => void;
   selectedElement: InspectionElement | null;
+  statusFilter?: 'all' | StatusType;
+  onChangeStatusFilter?: (status: 'all' | StatusType) => void;
+  pendingCount?: number;
   onOpenQuickEdit?: () => void;
   onUndo?: () => void;
   onRedo?: () => void;
@@ -56,6 +59,9 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
   activeLayer,
   onChangeActiveLayer,
   selectedElement,
+  statusFilter = 'all',
+  onChangeStatusFilter,
+  pendingCount = 0,
   onOpenQuickEdit,
   onUndo,
   onRedo,
@@ -88,8 +94,29 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
           <X className="w-4 h-4" />
         </button>
 
-        {/* Center Actions: Save, Undo, Redo, Fit, Search, Fullscreen */}
+        {/* Center Actions: Save, Undo, Redo, Fit, Search, Fullscreen, Pending Filter */}
         <div className="flex items-center gap-1 sm:gap-2 flex-1 justify-center">
+          {/* Quick Pending Filter Pill */}
+          {onChangeStatusFilter && (
+            <button
+              type="button"
+              onClick={() => onChangeStatusFilter(statusFilter === 'Pendiente' ? 'all' : 'Pendiente')}
+              className={`px-2 py-1 rounded-full text-[10px] font-black transition flex items-center gap-1 border ${
+                statusFilter === 'Pendiente'
+                  ? 'bg-rose-600 text-white border-rose-400 shadow-md ring-1 ring-rose-400 animate-pulse'
+                  : 'bg-slate-800/90 text-amber-300 border-amber-500/40 hover:bg-slate-700'
+              }`}
+              title="Filtrar solo elementos Pendientes para inspeccionar"
+            >
+              <span>⚠️ Pendientes</span>
+              {pendingCount > 0 && (
+                <span className="bg-black/60 px-1 py-0.2 rounded-full font-mono text-[9px]">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          )}
+
           {/* Save / Sync */}
           <button
             type="button"
