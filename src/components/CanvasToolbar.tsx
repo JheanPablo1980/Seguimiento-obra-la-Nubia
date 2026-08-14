@@ -67,6 +67,8 @@ interface CanvasToolbarProps {
   onChangeIconScale?: (scale: number) => void;
   appMode?: 'admin' | 'field';
   onOpenAiRecognition?: () => void;
+  onToggleFullscreen?: () => void;
+  isFullscreen?: boolean;
 }
 
 export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
@@ -100,10 +102,12 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onToggleAreaLabels,
   showSpecsLabels,
   onToggleSpecsLabels,
-  iconScale = 1.6,
+  iconScale = 2.2,
   onChangeIconScale,
   appMode = 'admin',
-  onOpenAiRecognition
+  onOpenAiRecognition,
+  onToggleFullscreen,
+  isFullscreen = false
 }) => {
   const isElectric = activeLayer === 'electrica';
 
@@ -366,8 +370,18 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               className="px-2 py-1 text-indigo-700 hover:text-indigo-900 hover:bg-white rounded border-l border-slate-200 transition text-[11px] font-bold flex items-center gap-1 bg-indigo-50/80"
             >
               <Maximize2 className="w-3.5 h-3.5 text-indigo-600" />
-              <span className="hidden sm:inline">Ajustar al Lienzo</span>
+              <span className="hidden sm:inline">Ajustar</span>
             </button>
+            {onToggleFullscreen && (
+              <button
+                onClick={onToggleFullscreen}
+                title={isFullscreen ? "Salir de pantalla completa" : "Ver plano en pantalla completa"}
+                className="px-2.5 py-1 text-emerald-800 hover:text-emerald-950 hover:bg-emerald-100 rounded border-l border-slate-200 transition text-[11px] font-black flex items-center gap-1 bg-emerald-50"
+              >
+                <Maximize2 className="w-3.5 h-3.5 text-emerald-700" />
+                <span>{isFullscreen ? 'Salir' : 'Pantalla Completa'}</span>
+              </button>
+            )}
           </div>
 
           {/* Dynamic Area Action Bar */}
@@ -526,13 +540,12 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                 className="bg-white text-indigo-950 font-bold border border-indigo-300 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer shadow-2xs"
                 title="Aumentar el tamaño de cámaras, canalizaciones y etiquetas para planos PDF escalados o de alta resolución"
               >
-                <option value={1.0}>1.0x (Normal)</option>
-                <option value={1.3}>1.3x (Mediano)</option>
-                <option value={1.6}>1.6x (Grande - Ideal PDFs)</option>
-                <option value={2.0}>2.0x (Extra Grande)</option>
-                <option value={2.5}>2.5x (Súper Gigante)</option>
-                <option value={3.0}>3.0x (3.0x - Ultra Gigante)</option>
-                <option value={4.0}>4.0x (4.0x - Máxima Visibilidad)</option>
+                <option value={1.2}>1.2x (Compacto)</option>
+                <option value={1.6}>1.6x (Normal Desktop)</option>
+                <option value={2.2}>2.2x (Grande Celular ⭐)</option>
+                <option value={2.8}>2.8x (Gigante Terreno)</option>
+                <option value={3.5}>3.5x (Ultra Visible Celular)</option>
+                <option value={4.5}>4.5x (Máxima Escala)</option>
               </select>
             </div>
           )}

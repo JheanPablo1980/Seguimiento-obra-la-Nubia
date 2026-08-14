@@ -1,7 +1,7 @@
 {
   "name": "Remix Seguimiento y Control de Obra La Nubia",
   "description": "Interfaz intuitiva para visualización en tiempo real de planos, canalizaciones eléctricas, telecomunicaciones, cámaras, cajas y métricas de avance de obra.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]

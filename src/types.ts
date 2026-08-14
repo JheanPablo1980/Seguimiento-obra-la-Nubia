@@ -90,7 +90,7 @@ export interface InspectionElement {
   onlyPipes?: boolean; // When true, this line tramo only requires conduit/tubería, no cables
   // For cameras / electrical nodes
   camType?: CameraNorm;
-  electricNodeType?: 'tablero' | 'transformador' | 'camara_electrica' | 'luminaria' | 'empalme' | 'caja_paso' | 'punto_fuerza' | string;
+  electricNodeType?: 'tablero' | 'transformador' | 'barrajes_elastomericos' | 'contador_electrico' | 'camara_electrica' | 'luminaria' | 'empalme' | 'caja_paso' | 'punto_fuerza' | 'spt' | string;
   circuitTag?: string; // e.g. "C-01 / 220V", "ALIM-TR-01"
   size?: number;
   // Schedule / Cronograma linkage

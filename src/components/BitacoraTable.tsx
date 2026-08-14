@@ -4,8 +4,9 @@ import { DEFAULT_CONTRACTUAL_ITEMS } from '../data/sampleData';
 import { formatExecutionTime } from '../utils/timeUtils';
 import { adjustTramoMeters } from '../utils/tramoUtils';
 import { normalizeActa, getAvailableActas } from '../utils/actaUtils';
-import { getElementPhotoRecords } from '../utils/photoUtils';
-import { normalizeLayer, LAYER_CONFIG, ELECTRICAL_NODE_TYPES } from '../utils/layerUtils';
+import { getElementPhotoRecords, syncElementPhotoRecords } from '../utils/photoUtils';
+import { normalizeLayer, LAYER_CONFIG, ELECTRICAL_NODE_TYPES, getElectricalNodeMeta } from '../utils/layerUtils';
+import { ElementPhotoRecord } from '../types';
 import { 
   ClipboardList, 
   Plus, 
@@ -41,6 +42,8 @@ interface BitacoraTableProps {
   appMode?: 'admin' | 'field';
   activeLayer?: ProjectLayer;
   onActiveLayerChange?: (layer: ProjectLayer) => void;
+  selectedElementId?: number | null;
+  onReturnToPlan?: () => void;
 }
 
 export const BitacoraTable: React.FC<BitacoraTableProps> = ({
@@ -60,12 +63,28 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
   globalConfig,
   appMode = 'admin',
   activeLayer = 'civil',
-  onActiveLayerChange
+  onActiveLayerChange,
+  selectedElementId,
+  onReturnToPlan
 }) => {
   const [contractItems, setContractItems] = useState<ContractualItem[]>([]);
   const [viewMode, setViewMode] = useState<'cards' | 'table'>(() => 
     typeof window !== 'undefined' && window.innerWidth < 768 ? 'cards' : 'table'
   );
+
+  // Auto-scroll to selected element when arriving from blueprint canvas
+  useEffect(() => {
+    if (selectedElementId) {
+      const timer = setTimeout(() => {
+        const target = document.getElementById(`bitacora-card-${selectedElementId}`) || 
+                       document.getElementById(`bitacora-row-${selectedElementId}`);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedElementId, viewMode]);
 
   useEffect(() => {
     const loadItems = () => {
@@ -153,19 +172,20 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
   const tabCountCameras = layerScopedElements.filter(e => e.type === 'camera').length;
   const tabCountTramos = layerScopedElements.filter(e => e.type === 'line').length;
 
-  const handleAddElectricalNode = () => {
-    const nodeCount = elements.filter(e => e.type === 'camera' && normalizeLayer(e.layer) === 'electrica').length + 1;
+  const handleAddElectricalNode = (nodeType: string = 'tablero') => {
+    const meta = getElectricalNodeMeta(nodeType);
+    const existingCount = elements.filter(e => e.type === 'camera' && normalizeLayer(e.layer) === 'electrica' && (e.electricNodeType === meta.id || e.label.startsWith(meta.prefix))).length + 1;
     const newEl: InspectionElement = {
       id: Date.now() + Math.floor(Math.random() * 100000),
       type: 'camera',
       layer: 'electrica',
-      electricNodeType: 'tablero',
-      label: `TD-${String(nodeCount).padStart(2, '0')}`,
+      electricNodeType: meta.id,
+      label: `${meta.prefix}${String(existingCount).padStart(2, '0')}`,
       status: 'Pendiente',
       x: 320,
       y: 280,
-      voltage: 220,
-      circuitTag: 'ALIM-TG-01',
+      voltage: meta.id === 'transformador' || meta.id === 'barrajes_elastomericos' ? 13200 : 220,
+      circuitTag: `ALIM-${meta.prefix}${String(existingCount).padStart(2, '0')}`,
       date: new Date().toISOString().split('T')[0]
     };
     onUpdateElement(newEl);
@@ -217,8 +237,8 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
             </button>
           )}
 
-          {/* Civil Adders: Mostrar Cámaras y Tramos solo en Capa Civil */}
-          {isCivilLayer && (
+          {/* Civil Adders: Mostrar Cámaras y Tramos solo en Capa Civil y Modo Administrador */}
+          {appMode === 'admin' && isCivilLayer && (
             <div className="flex items-center rounded-lg border border-amber-300 bg-amber-50/70 p-0.5 shadow-2xs gap-0.5">
               <button
                 type="button"
@@ -241,17 +261,44 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
             </div>
           )}
 
-          {/* Electric Adders: En capa eléctrica oculta Cámara/Tramo y muestra Nodo y Circuito */}
-          {isElectricLayer && (
-            <div className="flex items-center rounded-lg border border-cyan-400 bg-cyan-50/70 p-0.5 shadow-2xs gap-0.5">
+          {/* Electric Adders: En capa eléctrica oculta Cámara/Tramo y muestra Nodo y Circuito solo en Modo Administrador */}
+          {appMode === 'admin' && isElectricLayer && (
+            <div className="flex items-center rounded-lg border border-cyan-400 bg-cyan-50/70 p-0.5 shadow-2xs gap-0.5 flex-wrap">
               <button
                 type="button"
-                onClick={onAddElectricalNode || handleAddElectricalNode}
-                className="bg-cyan-700 hover:bg-cyan-600 text-white px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
-                title="Agregar Nodo Eléctrico (Tablero / Transformador / Luminaria)"
+                onClick={() => handleAddElectricalNode('tablero')}
+                className="bg-cyan-700 hover:bg-cyan-600 text-white px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
+                title="Agregar Tablero de Distribución"
               >
-                <Zap className="w-3 h-3 text-amber-300" />
-                <span>Nodo</span>
+                <span>⚡</span>
+                <span>Tablero</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAddElectricalNode('transformador')}
+                className="bg-amber-600 hover:bg-amber-500 text-white px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
+                title="Agregar Transformador / Subestación"
+              >
+                <span>🔋</span>
+                <span>Transf.</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAddElectricalNode('barrajes_elastomericos')}
+                className="bg-purple-700 hover:bg-purple-600 text-white px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
+                title="Agregar Barrajes Elastoméricos / Premoldeados"
+              >
+                <span>🪢</span>
+                <span>Barrajes</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAddElectricalNode('contador_electrico')}
+                className="bg-emerald-700 hover:bg-emerald-600 text-white px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 shadow-2xs transition"
+                title="Agregar Contador / Medidor Eléctrico"
+              >
+                <span>⏱️</span>
+                <span>Contador</span>
               </button>
               <button
                 type="button"
@@ -435,242 +482,397 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
         </div>
       </div>
 
-      {/* Cards View (Fichas Móviles) */}
+      {/* Cards View (Fichas Móviles Optimizadas para Inspector en Android) */}
       {viewMode === 'cards' ? (
-        <div className="space-y-3 max-h-[550px] overflow-y-auto pr-1">
-          {filteredElements.length === 0 ? (
-            <div className="py-8 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200 p-4">
-              <ClipboardList className="w-8 h-8 text-slate-300 mx-auto mb-1" />
-              <p className="font-bold text-slate-600">No hay elementos en este filtro</p>
-              <p className="text-[11px] text-slate-400">Dibuja un tramo civil o circuito eléctrico para comenzar.</p>
-            </div>
-          ) : (
-            filteredElements.map((el) => {
-              const sectorName = getAreaNameForElement ? getAreaNameForElement(el) : null;
-              const elLayer = normalizeLayer(el.layer);
-              const isElect = elLayer === 'electrica';
+        <div className="space-y-3">
+          {/* Quick Status Filter Pills for Mobile */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+            <button
+              type="button"
+              onClick={() => onFilterChange({ ...filter, statusFilter: 'all' })}
+              className={`px-3 py-1.5 rounded-full font-bold transition whitespace-nowrap ${
+                filter.statusFilter === 'all'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Todos ({elements.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => onFilterChange({ ...filter, statusFilter: 'Pendiente' })}
+              className={`px-3 py-1.5 rounded-full font-bold transition whitespace-nowrap ${
+                filter.statusFilter === 'Pendiente'
+                  ? 'bg-slate-700 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              ⏳ Pendientes ({elements.filter(e => e.status === 'Pendiente').length})
+            </button>
+            <button
+              type="button"
+              onClick={() => onFilterChange({ ...filter, statusFilter: 'En proceso' })}
+              className={`px-3 py-1.5 rounded-full font-bold transition whitespace-nowrap ${
+                filter.statusFilter === 'En proceso'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+              }`}
+            >
+              ⚙️ En Proceso ({elements.filter(e => e.status === 'En proceso').length})
+            </button>
+            <button
+              type="button"
+              onClick={() => onFilterChange({ ...filter, statusFilter: 'Terminado' })}
+              className={`px-3 py-1.5 rounded-full font-bold transition whitespace-nowrap ${
+                filter.statusFilter === 'Terminado'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+              }`}
+            >
+              ✅ Conformes ({elements.filter(e => e.status === 'Terminado').length})
+            </button>
+          </div>
 
-              return (
-                <div key={el.id} className={`bg-white border ${isElect ? 'border-cyan-300 hover:border-cyan-500' : 'border-amber-300 hover:border-amber-500'} rounded-xl p-3 shadow-xs space-y-2.5 transition`}>
-                  {/* Header Row: Label, Layer Switcher & Status Buttons */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {el.type === 'camera' ? (
-                        <span className={`p-1.5 rounded-lg font-extrabold text-xs flex items-center gap-1 ${
-                          isElect ? 'bg-cyan-50 border border-cyan-300 text-cyan-800' : 'bg-rose-50 border border-rose-200 text-rose-700'
-                        }`}>
-                          {isElect ? <Zap className="w-3.5 h-3.5 text-amber-500" /> : <MapPin className="w-3.5 h-3.5 text-rose-600" />}
-                          <span>{el.label}</span>
+          <div className="space-y-3 max-h-[580px] overflow-y-auto pr-1">
+            {filteredElements.length === 0 ? (
+              <div className="py-8 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200 p-4">
+                <ClipboardList className="w-8 h-8 text-slate-300 mx-auto mb-1" />
+                <p className="font-bold text-slate-600">No hay elementos con los filtros seleccionados</p>
+                <p className="text-[11px] text-slate-400">Prueba cambiando el estado o la búsqueda.</p>
+              </div>
+            ) : (
+              filteredElements.map((el) => {
+                const sectorName = getAreaNameForElement ? getAreaNameForElement(el) : null;
+                const elLayer = normalizeLayer(el.layer);
+                const isElect = elLayer === 'electrica';
+                const nodeMeta = isElect && el.type === 'camera' ? getElectricalNodeMeta(el.electricNodeType, el.label) : null;
+                const isSelected = selectedElementId === el.id;
+
+                const handleDirectCardPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+                  const files = e.target.files;
+                  if (!files || files.length === 0) return;
+                  const file = files[0];
+                  const reader = new FileReader();
+                  reader.onload = (event) => {
+                    const img = new window.Image();
+                    img.onload = () => {
+                      const canvas = document.createElement('canvas');
+                      let width = img.width;
+                      let height = img.height;
+                      const MAX_SIZE = 1280;
+                      if (width > height && width > MAX_SIZE) {
+                        height = Math.round((height * MAX_SIZE) / width);
+                        width = MAX_SIZE;
+                      } else if (height > MAX_SIZE) {
+                        width = Math.round((width * MAX_SIZE) / height);
+                        height = MAX_SIZE;
+                      }
+                      canvas.width = width;
+                      canvas.height = height;
+                      const ctx = canvas.getContext('2d');
+                      if (ctx) {
+                        ctx.drawImage(img, 0, 0, width, height);
+                        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.82);
+                        const currentRecords = getElementPhotoRecords(el);
+                        const newRecord: ElementPhotoRecord = {
+                          id: `photo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                          url: compressedBase64,
+                          date: el.date || new Date().toISOString().split('T')[0],
+                          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                          stage: 'Avance de Obra',
+                          finding: el.observations || 'Evidencia fotográfica capturada en campo'
+                        };
+                        const updated = syncElementPhotoRecords(el, [newRecord, ...currentRecords]);
+                        onUpdateElement(updated);
+                      }
+                    };
+                    img.src = event.target?.result as string;
+                  };
+                  reader.readAsDataURL(file);
+                  e.target.value = '';
+                };
+
+                return (
+                  <div 
+                    key={el.id} 
+                    id={`bitacora-card-${el.id}`}
+                    className={`bg-white border rounded-xl p-3 space-y-2.5 transition scroll-mt-20 ${
+                      isSelected
+                        ? 'ring-4 ring-sky-500 shadow-2xl border-sky-500 bg-sky-50/20'
+                        : isElect 
+                          ? 'border-cyan-300 hover:border-cyan-500 shadow-xs' 
+                          : 'border-amber-300 hover:border-amber-500 shadow-xs'
+                    }`}
+                  >
+                    {/* Selected Highlight Banner */}
+                    {isSelected && (
+                      <div className="bg-gradient-to-r from-sky-600 to-indigo-600 text-white px-2.5 py-1.5 rounded-lg text-xs font-black flex items-center justify-between shadow-sm animate-pulse">
+                        <span className="flex items-center gap-1.5">
+                          <Crosshair className="w-4 h-4 text-sky-200" />
+                          <span>📌 Elemento Seleccionado en Plano</span>
                         </span>
-                      ) : (
-                        <span className={`p-1.5 rounded-lg font-extrabold text-xs flex items-center gap-1 ${
-                          isElect ? 'bg-cyan-50 border border-cyan-300 text-cyan-800' : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
-                        }`}>
-                          <Ruler className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>{el.label}</span>
-                        </span>
-                      )}
-
-                      {/* Layer Toggle Pill */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextLayer: ProjectLayer = isElect ? 'civil' : 'electrica';
-                          onUpdateElement({ ...el, layer: nextLayer });
-                        }}
-                        className={`text-[10px] font-black px-2 py-0.5 rounded-full border transition flex items-center gap-1 cursor-pointer ${
-                          isElect 
-                            ? 'bg-cyan-900 text-cyan-200 border-cyan-700 hover:bg-cyan-800' 
-                            : 'bg-amber-900 text-amber-200 border-amber-700 hover:bg-amber-800'
-                        }`}
-                        title="Haz clic para alternar entre Capa Civil y Capa Eléctrica"
-                      >
-                        <span>{isElect ? '⚡ Eléctrica' : '🏗️ Civil'}</span>
-                      </button>
-
-                      {sectorName && (
-                        <span className="text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full">
-                          {sectorName}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Quick 3-State Buttons */}
-                    <div className="flex items-center gap-1">
-                      {(['Pendiente', 'En proceso', 'Terminado'] as StatusType[]).map((st) => (
-                        <button
-                          key={st}
-                          type="button"
-                          onClick={() => {
-                            let newPercent = el.progressPercent;
-                            if (st === 'En proceso' && (!newPercent || newPercent === 0)) newPercent = 50;
-                            if (st === 'Terminado') newPercent = 100;
-                            if (st === 'Pendiente') newPercent = 0;
-                            onUpdateElement({ ...el, status: st, progressPercent: newPercent });
-                          }}
-                          className={`px-2 py-1 rounded text-[10px] font-extrabold border transition cursor-pointer ${
-                            el.status === st
-                              ? getStatusBadgeClass(st) + ' shadow-2xs scale-105'
-                              : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
-                          }`}
-                        >
-                          {st === 'Pendiente' ? '⏳ Pend.' : st === 'En proceso' ? '⚙️ Proceso' : '✅ Listo'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Progress bar if En proceso */}
-                  {el.status === 'En proceso' && (
-                    <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs">
-                      <span className="font-extrabold text-amber-900 shrink-0">% Avance:</span>
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        value={el.progressPercent !== undefined ? el.progressPercent : 50}
-                        onChange={(e) => onUpdateElement({ ...el, progressPercent: Number(e.target.value) })}
-                        className="w-full accent-amber-600 cursor-pointer h-2"
-                      />
-                      <span className="font-black text-amber-900 shrink-0 w-8 text-right">{el.progressPercent ?? 50}%</span>
-                    </div>
-                  )}
-
-                  {/* Specs Details */}
-                  <div className="text-xs text-slate-700 space-y-1 bg-slate-50 rounded-lg p-2 border border-slate-100">
-                    {el.type === 'camera' ? (
-                      <div className="flex items-center justify-between text-[11px] flex-wrap gap-1">
-                        {isElect ? (
-                          <>
-                            <span><strong>Tipo Nodo:</strong> {el.electricNodeType || 'Tablero'}</span>
-                            {el.circuitTag && <span><strong>Circuito:</strong> <span className="font-mono text-cyan-800 font-bold">{el.circuitTag}</span></span>}
-                            {el.voltage && <span><strong>Tensión:</strong> {el.voltage}V</span>}
-                          </>
-                        ) : (
-                          <>
-                            <span><strong>Norma:</strong> {el.camType || 'SB850'}</span>
-                            {el.voltage && <span><strong>Voltaje:</strong> {el.voltage}V</span>}
-                          </>
+                        {onReturnToPlan && (
+                          <button
+                            type="button"
+                            onClick={onReturnToPlan}
+                            className="bg-white text-sky-950 px-2 py-0.5 rounded font-black text-[10px] hover:bg-sky-50 transition shadow-xs flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>Volver al Plano</span>
+                            <span>📐</span>
+                          </button>
                         )}
                       </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-800 flex-wrap gap-1">
-                          <span><strong>Longitud:</strong> {el.meters ? `${el.meters}m` : '-'}</span>
-                          <span><strong>{isElect ? 'Ducto / Canal' : 'Tubería'}:</strong> {el.pipes || '-'}</span>
-                          {el.circuitTag && <span><strong>Circuito:</strong> <span className="font-mono text-cyan-800 font-bold">{el.circuitTag}</span></span>}
-                        </div>
-                        {el.cables && (
-                          <div className="text-[10px] text-slate-500 truncate">
-                            <strong>{isElect ? 'Conductores / Calibre:' : 'Conductores:'}</strong> {el.cables}
-                          </div>
-                        )}
-                      </>
                     )}
-                  </div>
 
-                  {/* Selectors for Acta & Ítem Cobro */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-[10px] font-bold text-emerald-800 block mb-0.5">Acta de Cobro:</span>
-                      <select
-                        value={normalizeActa(el.acta) === 'Sin Asignar' ? '' : normalizeActa(el.acta)}
-                        onChange={(e) => onUpdateElement({ ...el, acta: e.target.value })}
-                        className="w-full p-1.5 border border-emerald-300 rounded-lg text-xs font-bold text-emerald-900 bg-emerald-50 focus:bg-white transition cursor-pointer"
-                      >
-                        <option value="">-- Sin Asignar --</option>
-                        {availableActas.map(a => (
-                          <option key={a} value={a}>{a}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] font-bold text-sky-800 block mb-0.5">Ítem del Acta de Obra:</span>
-                      <select
-                        value={el.itemCobro || ''}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          const ci = contractItems.find(c => c.item === val);
-                          if (ci) {
-                            onUpdateElement({ ...el, itemCobro: ci.item, itemDescripcion: ci.description, itemUnidad: ci.unit });
-                          } else {
-                            onUpdateElement({ ...el, itemCobro: val });
-                          }
-                        }}
-                        className="w-full p-1.5 border border-sky-300 rounded-lg text-xs font-bold text-sky-900 bg-sky-50 focus:bg-white transition cursor-pointer"
-                      >
-                        <option value="">-- Sin Ítem --</option>
-                        <optgroup label="📋 Ítems del Acta / Presupuesto">
-                          {contractItems.map((ci, idx) => (
-                            <option key={`${ci.item}_${idx}`} value={ci.item}>
-                              {ci.item} - {ci.description} ({ci.unit})
-                            </option>
-                          ))}
-                        </optgroup>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Observaciones Field */}
-                  <div>
-                    <input
-                      type="text"
-                      placeholder="Añadir observaciones de inspección..."
-                      value={el.observations || ''}
-                      onChange={(e) => onUpdateElement({ ...el, observations: e.target.value })}
-                      className="w-full p-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 bg-slate-50 focus:bg-white transition placeholder:italic"
-                    />
-                  </div>
-
-                  {/* Action Bar */}
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
-                    <div className="flex items-center gap-1.5">
-                      {(() => {
-                        const records = getElementPhotoRecords(el);
-                        const hasFindings = records.some(r => (r.finding && r.finding.length > 0) || (r.stage || '').toLowerCase().includes('hallazgo'));
-                        return (
-                          <button
-                            onClick={() => onInspectElement(el)}
-                            className={`px-2.5 py-1.5 font-bold border rounded-lg flex items-center gap-1 transition shadow-2xs ${
-                              hasFindings 
-                                ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300' 
-                                : 'bg-sky-50 hover:bg-sky-100 text-sky-800 border-sky-200'
-                            }`}
-                            title="Ver fotos y trazabilidad de hallazgos por fecha"
-                          >
-                            <Camera className={`w-3.5 h-3.5 ${hasFindings ? 'text-amber-600' : 'text-sky-600'}`} />
-                            <span>Fotos ({records.length})</span>
-                            {hasFindings && (
-                              <span className="bg-amber-500 text-slate-950 text-[9px] px-1 rounded-full font-black">
-                                Hallazgo
-                              </span>
+                    {/* Header Row: Label, Layer Switcher & Status Buttons */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {el.type === 'camera' ? (
+                          <span className={`p-1.5 rounded-lg font-extrabold text-xs flex items-center gap-1.5 ${
+                            isElect ? 'bg-cyan-50 border border-cyan-300 text-cyan-900 shadow-2xs' : 'bg-rose-50 border border-rose-200 text-rose-700'
+                          }`}>
+                            {isElect && nodeMeta ? (
+                              <>
+                                <span className="text-base leading-none" title={nodeMeta.label}>{nodeMeta.icon}</span>
+                                <span>{el.label}</span>
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white text-cyan-950 border border-cyan-200">
+                                  {nodeMeta.label.split('/')[0].trim()}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <MapPin className="w-3.5 h-3.5 text-rose-600" />
+                                <span>{el.label}</span>
+                              </>
                             )}
+                          </span>
+                        ) : (
+                          <span className={`p-1.5 rounded-lg font-extrabold text-xs flex items-center gap-1.5 ${
+                            isElect ? 'bg-cyan-50 border border-cyan-300 text-cyan-800' : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                          }`}>
+                            <Ruler className={`w-3.5 h-3.5 ${isElect ? 'text-cyan-700' : 'text-emerald-600'}`} />
+                            <span>{el.label}</span>
+                          </span>
+                        )}
+
+                        {/* Layer Toggle Pill */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextLayer: ProjectLayer = isElect ? 'civil' : 'electrica';
+                            onUpdateElement({ ...el, layer: nextLayer });
+                          }}
+                          className={`text-[10px] font-black px-2 py-0.5 rounded-full border transition flex items-center gap-1 cursor-pointer ${
+                            isElect 
+                              ? 'bg-cyan-900 text-cyan-200 border-cyan-700 hover:bg-cyan-800' 
+                              : 'bg-amber-900 text-amber-200 border-amber-700 hover:bg-amber-800'
+                          }`}
+                          title="Haz clic para alternar entre Capa Civil y Capa Eléctrica"
+                        >
+                          <span>{isElect ? '⚡ Eléctrica' : '🏗️ Civil'}</span>
+                        </button>
+
+                        {sectorName && (
+                          <span className="text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full">
+                            {sectorName}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Quick 3-State Buttons */}
+                      <div className="flex items-center gap-1">
+                        {(['Pendiente', 'En proceso', 'Terminado'] as StatusType[]).map((st) => (
+                          <button
+                            key={st}
+                            type="button"
+                            onClick={() => {
+                              let newPercent = el.progressPercent;
+                              if (st === 'En proceso' && (!newPercent || newPercent === 0)) newPercent = 50;
+                              if (st === 'Terminado') newPercent = 100;
+                              if (st === 'Pendiente') newPercent = 0;
+                              onUpdateElement({ ...el, status: st, progressPercent: newPercent });
+                            }}
+                            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold border transition cursor-pointer ${
+                              el.status === st
+                                ? getStatusBadgeClass(st) + ' shadow-xs scale-105 font-black'
+                                : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {st === 'Pendiente' ? '⏳ Pend.' : st === 'En proceso' ? '⚙️ Proceso' : '✅ Listo'}
                           </button>
-                        );
-                      })()}
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Progress bar if En proceso */}
+                    {el.status === 'En proceso' && (
+                      <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs">
+                        <span className="font-extrabold text-amber-900 shrink-0">% Avance:</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={el.progressPercent !== undefined ? el.progressPercent : 50}
+                          onChange={(e) => onUpdateElement({ ...el, progressPercent: Number(e.target.value) })}
+                          className="w-full accent-amber-600 cursor-pointer h-2"
+                        />
+                        <span className="font-black text-amber-900 shrink-0 w-8 text-right">{el.progressPercent ?? 50}%</span>
+                      </div>
+                    )}
+
+                    {/* Specs Details */}
+                    <div className="text-xs text-slate-700 space-y-1 bg-slate-50 rounded-lg p-2 border border-slate-100">
+                      {el.type === 'camera' ? (
+                        <div className="flex items-center justify-between text-[11px] flex-wrap gap-1.5">
+                          {isElect ? (
+                            <>
+                              <span className="flex items-center gap-1">
+                                <strong>Tipo:</strong>
+                                <span className="font-bold text-cyan-950 flex items-center gap-1 bg-cyan-100/80 px-1.5 py-0.5 rounded border border-cyan-300">
+                                  {nodeMeta?.icon} {nodeMeta?.label}
+                                </span>
+                              </span>
+                              {el.circuitTag && <span><strong>Circuito:</strong> <span className="font-mono text-cyan-800 font-bold bg-white px-1.5 py-0.5 rounded border border-cyan-200">{el.circuitTag}</span></span>}
+                              {el.voltage && <span className="font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">⚡ {el.voltage}V</span>}
+                            </>
+                          ) : (
+                            <>
+                              <span><strong>Norma:</strong> {el.camType || 'SB850'}</span>
+                              {el.voltage && <span><strong>Voltaje:</strong> {el.voltage}V</span>}
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-800 flex-wrap gap-1">
+                            <span><strong>Longitud:</strong> {el.meters ? `${el.meters}m` : '-'}</span>
+                            <span><strong>{isElect ? 'Ducto / Canal' : 'Tubería'}:</strong> {el.pipes || '-'}</span>
+                            {el.circuitTag && <span><strong>Circuito:</strong> <span className="font-mono text-cyan-800 font-bold">{el.circuitTag}</span></span>}
+                          </div>
+                          {el.cables && (
+                            <div className="text-[10px] text-slate-500 truncate">
+                              <strong>{isElect ? 'Conductores / Calibre:' : 'Conductores:'}</strong> {el.cables}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {/* Selectors for Acta & Ítem Cobro */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-[10px] font-bold text-emerald-800 block mb-0.5">Acta de Cobro:</span>
+                        <select
+                          value={normalizeActa(el.acta) === 'Sin Asignar' ? '' : normalizeActa(el.acta)}
+                          onChange={(e) => onUpdateElement({ ...el, acta: e.target.value })}
+                          className="w-full p-1.5 border border-emerald-300 rounded-lg text-xs font-bold text-emerald-900 bg-emerald-50 focus:bg-white transition cursor-pointer"
+                        >
+                          <option value="">-- Sin Asignar --</option>
+                          {availableActas.map(a => (
+                            <option key={a} value={a}>{a}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] font-bold text-sky-800 block mb-0.5">Ítem del Acta de Obra:</span>
+                        <select
+                          value={el.itemCobro || ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const ci = contractItems.find(c => c.item === val);
+                            if (ci) {
+                              onUpdateElement({ ...el, itemCobro: ci.item, itemDescripcion: ci.description, itemUnidad: ci.unit });
+                            } else {
+                              onUpdateElement({ ...el, itemCobro: val });
+                            }
+                          }}
+                          className="w-full p-1.5 border border-sky-300 rounded-lg text-xs font-bold text-sky-900 bg-sky-50 focus:bg-white transition cursor-pointer"
+                        >
+                          <option value="">-- Sin Ítem --</option>
+                          <optgroup label="📋 Ítems del Acta / Presupuesto">
+                            {contractItems.map((ci, idx) => (
+                              <option key={`${ci.item}_${idx}`} value={ci.item}>
+                                {ci.item} - {ci.description} ({ci.unit})
+                              </option>
+                            ))}
+                          </optgroup>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Observaciones Field */}
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="Añadir observaciones de inspección..."
+                        value={el.observations || ''}
+                        onChange={(e) => onUpdateElement({ ...el, observations: e.target.value })}
+                        className="w-full p-2 border border-slate-200 rounded-lg text-xs text-slate-700 bg-slate-50 focus:bg-white transition placeholder:italic"
+                      />
+                    </div>
+
+                    {/* Action Bar with Quick Camera Upload & Navigation */}
+                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 text-xs gap-1 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        {/* Direct Fast Camera Button for Android */}
+                        <label className="p-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition shadow-xs">
+                          <Camera className="w-3.5 h-3.5" />
+                          <span>Tomar Foto</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={handleDirectCardPhotoUpload}
+                            className="hidden"
+                          />
+                        </label>
+
+                        {(() => {
+                          const records = getElementPhotoRecords(el);
+                          const hasFindings = records.some(r => (r.finding && r.finding.length > 0) || (r.stage || '').toLowerCase().includes('hallazgo'));
+                          return (
+                            <button
+                              onClick={() => onInspectElement(el)}
+                              className={`px-2.5 py-1.5 font-bold border rounded-lg flex items-center gap-1 transition shadow-2xs ${
+                                hasFindings 
+                                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300' 
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                              }`}
+                              title="Ver fotos y trazabilidad de hallazgos por fecha"
+                            >
+                              <span>Fotos ({records.length})</span>
+                              {hasFindings && (
+                                <span className="bg-amber-500 text-slate-950 text-[9px] px-1 rounded-full font-black">
+                                  Hallazgo
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })()}
+
+                        <button
+                          onClick={() => onInspectElement(el)}
+                          className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 rounded-lg flex items-center gap-1 transition shadow-2xs"
+                        >
+                          <Activity className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Ficha</span>
+                        </button>
+                      </div>
 
                       <button
-                        onClick={() => onInspectElement(el)}
-                        className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 rounded-lg flex items-center gap-1 transition shadow-2xs"
+                        onClick={() => onLocateElement(el)}
+                        className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold border border-amber-400 rounded-lg flex items-center gap-1 transition shadow-2xs"
                       >
-                        <Activity className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Bitácora</span>
+                        <Crosshair className="w-3.5 h-3.5 text-slate-950" />
+                        <span>📍 Ver en Plano</span>
                       </button>
                     </div>
-
-                    <button
-                      onClick={() => onLocateElement(el)}
-                      className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold border border-amber-400 rounded-lg flex items-center gap-1 transition shadow-2xs"
-                    >
-                      <Crosshair className="w-3.5 h-3.5 text-slate-950" />
-                      <span>📍 Ver en Plano</span>
-                    </button>
                   </div>
-                </div>
-              );
-            })
-          )}
+                );
+              })
+            )}
+          </div>
         </div>
       ) : (
         /* Table Container */
@@ -713,9 +915,21 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                 const areaBadge = getAreaNameForElement(el);
                 const elLayer = normalizeLayer(el.layer);
                 const isElect = elLayer === 'electrica';
+                const nodeMeta = isElect && el.type === 'camera' ? getElectricalNodeMeta(el.electricNodeType, el.label) : null;
+                const isSelected = selectedElementId === el.id;
 
                 return (
-                  <tr key={el.id} className={`hover:bg-slate-50 transition border-b border-slate-100 ${isElect ? 'bg-cyan-50/20' : ''}`}>
+                  <tr 
+                    key={el.id} 
+                    id={`bitacora-row-${el.id}`}
+                    className={`transition border-b border-slate-100 scroll-mt-20 ${
+                      isSelected 
+                        ? 'bg-sky-100/80 ring-2 ring-sky-500 font-semibold' 
+                        : isElect 
+                          ? 'bg-cyan-50/20 hover:bg-cyan-50/40' 
+                          : 'hover:bg-slate-50'
+                    }`}
+                  >
                     {/* Layer Column with Interactive Switcher */}
                     <td className="py-2 px-2 text-center" data-label="Capa">
                       <select
@@ -735,12 +949,17 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
 
                     <td className="py-2 px-3" data-label="Elemento">
                       <div className="flex items-center justify-between gap-1">
-                        <input
-                          type="text"
-                          value={el.label}
-                          onChange={(e) => onUpdateElement({ ...el, label: e.target.value })}
-                          className="font-extrabold text-slate-800 text-sm bg-transparent border-b border-transparent hover:border-slate-300 focus:border-sky-500 focus:outline-none w-28"
-                        />
+                        <div className="flex items-center gap-1.5">
+                          {isElect && nodeMeta && (
+                            <span className="text-base" title={nodeMeta.label}>{nodeMeta.icon}</span>
+                          )}
+                          <input
+                            type="text"
+                            value={el.label}
+                            onChange={(e) => onUpdateElement({ ...el, label: e.target.value })}
+                            className="font-extrabold text-slate-800 text-sm bg-transparent border-b border-transparent hover:border-slate-300 focus:border-sky-500 focus:outline-none w-28"
+                          />
+                        </div>
                         <div className="flex items-center gap-1 flex-wrap">
                           {isElect && el.circuitTag && (
                             <span className="text-[10px] font-mono font-bold text-cyan-800 bg-cyan-100 px-1.5 py-0.5 rounded border border-cyan-300">
@@ -762,11 +981,20 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                         <div className="flex items-center gap-1.5 flex-wrap mt-1">
                           {isElect ? (
                             <>
-                              <span className="text-xs text-cyan-700 font-semibold">Nodo:</span>
+                              <span className="text-xs text-cyan-900 font-bold flex items-center gap-1">
+                                Nodo:
+                              </span>
                               <select
                                 value={el.electricNodeType || 'tablero'}
-                                onChange={(e) => onUpdateElement({ ...el, electricNodeType: e.target.value })}
-                                className="text-xs px-1.5 py-0.5 border border-cyan-300 rounded font-semibold bg-white text-cyan-900"
+                                onChange={(e) => {
+                                  const nextType = e.target.value;
+                                  onUpdateElement({ 
+                                    ...el, 
+                                    electricNodeType: nextType,
+                                    voltage: nextType === 'transformador' || nextType === 'barrajes_elastomericos' ? 13200 : (el.voltage || 220)
+                                  });
+                                }}
+                                className="text-xs px-1.5 py-0.5 border border-cyan-300 rounded font-bold bg-white text-cyan-950 shadow-2xs cursor-pointer"
                               >
                                 {ELECTRICAL_NODE_TYPES.map(n => (
                                   <option key={n.id} value={n.id}>{n.icon} {n.label}</option>
@@ -1049,13 +1277,15 @@ export const BitacoraTable: React.FC<BitacoraTableProps> = ({
                         >
                           <Crosshair className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => onDeleteElement(el.id)}
-                          className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {appMode === 'admin' && (
+                          <button
+                            onClick={() => onDeleteElement(el.id)}
+                            className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

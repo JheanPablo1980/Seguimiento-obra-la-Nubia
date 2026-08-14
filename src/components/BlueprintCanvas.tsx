@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback, useImperativeHandle } from 'react';
-import { AreaSector, FreehandStroke, InspectionElement, Point, CameraNorm, ProjectMeta, ProjectLayer } from '../types';
+import { AreaSector, FreehandStroke, InspectionElement, Point, CameraNorm, ProjectMeta, ProjectLayer, StatusType } from '../types';
 import { ToolType } from './CanvasToolbar';
 import { adjustTramoMeters } from '../utils/tramoUtils';
 import { getElementPhotoRecords } from '../utils/photoUtils';
@@ -21,6 +21,7 @@ interface BlueprintCanvasProps {
   zoomLevel: number;
   onZoomChange?: (zoom: number) => void;
   iconScale?: number;
+  className?: string;
   // Multi-Layer Props
   activeLayer?: ProjectLayer;
   layerVisibility?: { civil: boolean; electrica: boolean };
@@ -33,6 +34,8 @@ interface BlueprintCanvasProps {
   camCounter: number;
   camDefaultType: CameraNorm;
   isLocked?: boolean;
+  selectedElementId?: number | null;
+  statusFilter?: 'all' | StatusType;
   // Area drawing state
   currentAreaPoints: Point[];
   onAddAreaPoint: (point: Point) => void;
@@ -54,7 +57,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   areas,
   zoomLevel,
   onZoomChange,
-  iconScale = 1.6,
+  iconScale = 2.2,
+  className,
   activeLayer = 'civil',
   layerVisibility = { civil: true, electrica: true },
   showCameraLabels,
@@ -65,6 +69,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   camCounter,
   camDefaultType,
   isLocked = false,
+  selectedElementId,
+  statusFilter = 'all',
   currentAreaPoints,
   onAddAreaPoint,
   onFinishArea,
@@ -169,7 +175,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     colorHex: string,
     subText?: string,
     scale: number = 1.6,
-    isElectric: boolean = false
+    isElectric: boolean = false,
+    isDimmed: boolean = false
   ) => {
     ctx.save();
     const titleFontSize = Math.max(11, Math.round(11 * (scale * 0.8)));
@@ -192,12 +199,20 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     const cornerRadius = Math.max(5, Math.round(6 * (scale * 0.8)));
 
     // Subtle drop shadow
-    ctx.shadowColor = isElectric ? 'rgba(6, 182, 212, 0.4)' : 'rgba(0, 0, 0, 0.45)';
-    ctx.shadowBlur = Math.round(8 * (scale * 0.8));
-    ctx.shadowOffsetY = Math.round(3 * (scale * 0.8));
+    if (isDimmed) {
+      ctx.shadowColor = 'transparent';
+    } else {
+      ctx.shadowColor = isElectric ? 'rgba(6, 182, 212, 0.4)' : 'rgba(0, 0, 0, 0.45)';
+      ctx.shadowBlur = Math.round(8 * (scale * 0.8));
+      ctx.shadowOffsetY = Math.round(3 * (scale * 0.8));
+    }
 
     // Background rounded rectangle
-    ctx.fillStyle = isElectric ? 'rgba(8, 20, 44, 0.96)' : 'rgba(15, 23, 42, 0.94)';
+    if (isDimmed) {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+    } else {
+      ctx.fillStyle = isElectric ? 'rgba(8, 20, 44, 0.96)' : 'rgba(15, 23, 42, 0.94)';
+    }
     ctx.beginPath();
     ctx.roundRect(x - bgWidth / 2, y - bgHeight / 2, bgWidth, bgHeight, cornerRadius);
     ctx.fill();
@@ -205,9 +220,9 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     // Reset shadow for sharp lines & text
     ctx.shadowColor = 'transparent';
 
-    // Border outline with status color or electric cyan
-    ctx.strokeStyle = isElectric ? '#06b6d4' : (colorHex || '#38bdf8');
-    ctx.lineWidth = Math.max(1.5, 1.5 * (scale * 0.8));
+    // Border outline with status color or electric cyan or dim gray
+    ctx.strokeStyle = isDimmed ? '#64748b' : (isElectric ? '#06b6d4' : (colorHex || '#38bdf8'));
+    ctx.lineWidth = isDimmed ? Math.max(1, 1 * (scale * 0.8)) : Math.max(1.5, 1.5 * (scale * 0.8));
     ctx.stroke();
 
     // Status indicator dot
@@ -216,9 +231,9 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
     ctx.beginPath();
     ctx.arc(dotX, dotY, dotSize / 2, 0, Math.PI * 2);
-    ctx.fillStyle = colorHex || (isElectric ? '#06b6d4' : '#38bdf8');
+    ctx.fillStyle = isDimmed ? '#64748b' : (colorHex || (isElectric ? '#06b6d4' : '#38bdf8'));
     ctx.fill();
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = isDimmed ? '#475569' : '#ffffff';
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -228,15 +243,15 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     const textX = dotX + dotSize / 2 + Math.round(5 * (scale * 0.8));
 
     if (subText) {
-      ctx.fillStyle = '#f8fafc';
+      ctx.fillStyle = isDimmed ? '#94a3b8' : '#f8fafc';
       ctx.font = `bold ${titleFontSize}px Inter, system-ui, sans-serif`;
       ctx.fillText(labelText, textX, y - Math.round(6 * (scale * 0.8)));
 
-      ctx.fillStyle = isElectric ? '#67e8f9' : '#fbbf24'; // Cyan highlight for electric specs, Amber for civil
+      ctx.fillStyle = isDimmed ? '#64748b' : (isElectric ? '#67e8f9' : '#fbbf24'); // Cyan highlight for electric specs, Amber for civil
       ctx.font = `${subFontSize}px "JetBrains Mono", monospace, sans-serif`;
       ctx.fillText(subText, x - bgWidth / 2 + paddingX, y + Math.round(8 * (scale * 0.8)));
     } else {
-      ctx.fillStyle = '#f8fafc';
+      ctx.fillStyle = isDimmed ? '#94a3b8' : '#f8fafc';
       ctx.font = `bold ${titleFontSize}px Inter, system-ui, sans-serif`;
       ctx.fillText(labelText, textX, y);
     }
@@ -255,38 +270,61 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     size: number = 10,
     showLabel: boolean,
     subText?: string,
-    scale: number = 1.6
+    scale: number = 1.6,
+    isDimmed: boolean = false
   ) => {
     ctx.save();
 
     // Base circular badge diameter scaled for high human visibility
     const iconRadius = Math.max((size + 4) * scale, 18 * scale);
 
-    // Outer glow shadow
-    ctx.shadowColor = colorHex;
-    ctx.shadowBlur = 10 * scale;
+    if (isDimmed) {
+      ctx.shadowColor = 'transparent';
+      ctx.beginPath();
+      ctx.arc(x, y, iconRadius, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+      ctx.fill();
 
-    // Outer dark background badge
-    ctx.beginPath();
-    ctx.arc(x, y, iconRadius, 0, Math.PI * 2);
-    ctx.fillStyle = '#0f172a'; // Deep dark slate background
-    ctx.fill();
+      // Status colored border ring -> dim gray
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = Math.max(1.5, 2 * scale);
+      ctx.stroke();
 
-    ctx.shadowColor = 'transparent'; // turn off blur for sharp vector icon
+      // Outer dashed locator ring -> dim gray
+      ctx.beginPath();
+      ctx.arc(x, y, iconRadius + 5 * scale, 0, Math.PI * 2);
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = Math.max(0.8, 1 * scale);
+      ctx.setLineDash([3 * scale, 3 * scale]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      // Outer glow shadow
+      ctx.shadowColor = colorHex;
+      ctx.shadowBlur = 10 * scale;
 
-    // Status colored border ring
-    ctx.strokeStyle = colorHex;
-    ctx.lineWidth = Math.max(2.5, 3 * scale);
-    ctx.stroke();
+      // Outer dark background badge
+      ctx.beginPath();
+      ctx.arc(x, y, iconRadius, 0, Math.PI * 2);
+      ctx.fillStyle = '#0f172a'; // Deep dark slate background
+      ctx.fill();
 
-    // Outer dashed locator ring
-    ctx.beginPath();
-    ctx.arc(x, y, iconRadius + 5 * scale, 0, Math.PI * 2);
-    ctx.strokeStyle = colorHex;
-    ctx.lineWidth = Math.max(1, 1.2 * scale);
-    ctx.setLineDash([3 * scale, 3 * scale]);
-    ctx.stroke();
-    ctx.setLineDash([]);
+      ctx.shadowColor = 'transparent'; // turn off blur for sharp vector icon
+
+      // Status colored border ring
+      ctx.strokeStyle = colorHex;
+      ctx.lineWidth = Math.max(2.5, 3 * scale);
+      ctx.stroke();
+
+      // Outer dashed locator ring
+      ctx.beginPath();
+      ctx.arc(x, y, iconRadius + 5 * scale, 0, Math.PI * 2);
+      ctx.strokeStyle = colorHex;
+      ctx.lineWidth = Math.max(1, 1.2 * scale);
+      ctx.setLineDash([3 * scale, 3 * scale]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     // DRAW VECTOR FLOOR INSPECTION CHAMBER (CÁMARA DE PISO CIVIL) ICON
     ctx.save();
@@ -298,10 +336,10 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     // 1. Outer Box Metallic Frame (Marco en ángulo)
     ctx.beginPath();
     ctx.roundRect(boxX, boxY, boxSize, boxSize, 2 * scale);
-    ctx.fillStyle = colorHex;
+    ctx.fillStyle = isDimmed ? '#475569' : colorHex;
     ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = Math.max(1, 1.2 * scale);
+    ctx.strokeStyle = isDimmed ? '#64748b' : '#ffffff';
+    ctx.lineWidth = Math.max(0.8, 1.2 * scale);
     ctx.stroke();
 
     // 2. Concrete Lid Plate (Tapa de concreto interior)
@@ -311,10 +349,10 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
     ctx.beginPath();
     ctx.roundRect(lidX, lidY, lidSize, lidSize, 1 * scale);
-    ctx.fillStyle = '#0f172a'; // Deep slate chamber interior
+    ctx.fillStyle = isDimmed ? '#1e293b' : '#0f172a';
     ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = Math.max(0.8, 1 * scale);
+    ctx.strokeStyle = isDimmed ? '#475569' : '#ffffff';
+    ctx.lineWidth = Math.max(0.6, 1 * scale);
     ctx.stroke();
 
     // 3. Concrete Rebar Grid Pattern (Malla electro-soldada)
@@ -324,8 +362,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     ctx.moveTo(x, lidY + 1.5 * scale);
     ctx.lineTo(x, lidY + lidSize - 1.5 * scale);
 
-    ctx.strokeStyle = colorHex;
-    ctx.lineWidth = Math.max(1, 1.2 * scale);
+    ctx.strokeStyle = isDimmed ? '#64748b' : colorHex;
+    ctx.lineWidth = Math.max(0.8, 1.2 * scale);
     ctx.stroke();
 
     // 4. Corner Anchors & Perspective Chamfers
@@ -339,24 +377,30 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     ctx.moveTo(boxX + boxSize - 0.5 * scale, boxY + boxSize - 0.5 * scale);
     ctx.lineTo(lidX + lidSize, lidY + lidSize);
 
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.lineWidth = Math.max(0.8, 1 * scale);
+    ctx.strokeStyle = isDimmed ? 'rgba(100, 116, 139, 0.4)' : 'rgba(255, 255, 255, 0.6)';
+    ctx.lineWidth = Math.max(0.6, 1 * scale);
     ctx.stroke();
 
     // 5. Placa de Identificación / Norma (MT, BT, D)
     const upperSub = (subText || '').toUpperCase();
     let normCode = '';
-    let normColor = '#f59e0b';
+    let normColor = isDimmed ? '#94a3b8' : '#f59e0b';
 
-    if (upperSub.includes('MT')) {
-      normCode = 'MT';
-      normColor = '#d946ef';
-    } else if (upperSub.includes('D') && !upperSub.includes('MOD') && !upperSub.includes('ADD')) {
-      normCode = 'D';
-      normColor = '#3b82f6';
-    } else if (upperSub.includes('BT')) {
-      normCode = 'BT';
-      normColor = '#10b981';
+    if (!isDimmed) {
+      if (upperSub.includes('MT')) {
+        normCode = 'MT';
+        normColor = '#d946ef';
+      } else if (upperSub.includes('D') && !upperSub.includes('MOD') && !upperSub.includes('ADD')) {
+        normCode = 'D';
+        normColor = '#3b82f6';
+      } else if (upperSub.includes('BT')) {
+        normCode = 'BT';
+        normColor = '#10b981';
+      }
+    } else {
+      if (upperSub.includes('MT')) normCode = 'MT';
+      else if (upperSub.includes('D')) normCode = 'D';
+      else if (upperSub.includes('BT')) normCode = 'BT';
     }
 
     if (normCode) {
@@ -370,23 +414,23 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       const tagH = 1.8 * scale;
       ctx.beginPath();
       ctx.roundRect(lidX + 1 * scale, lidY + 1 * scale, tagW, tagH, 0.5 * scale);
-      ctx.fillStyle = '#f59e0b';
+      ctx.fillStyle = isDimmed ? '#64748b' : '#f59e0b';
       ctx.fill();
     }
 
     ctx.restore();
 
-    // Small Glowing Status Dot at top right
+    // Small Status Dot at top right
     const dotAngle = -Math.PI / 4;
     const statusX = x + Math.cos(dotAngle) * iconRadius;
     const statusY = y + Math.sin(dotAngle) * iconRadius;
 
     ctx.beginPath();
     ctx.arc(statusX, statusY, 4.5 * scale, 0, Math.PI * 2);
-    ctx.fillStyle = colorHex;
+    ctx.fillStyle = isDimmed ? '#64748b' : colorHex;
     ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = Math.max(1.5, 1.8 * scale);
+    ctx.strokeStyle = isDimmed ? '#475569' : '#ffffff';
+    ctx.lineWidth = Math.max(1.2, 1.8 * scale);
     ctx.stroke();
 
     // Label Badge below if enabled
@@ -397,13 +441,13 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       ctx.beginPath();
       ctx.moveTo(x, y + iconRadius + 2 * scale);
       ctx.lineTo(x, badgeY - 10 * scale);
-      ctx.strokeStyle = colorHex;
-      ctx.lineWidth = Math.max(1.5, 1.8 * scale);
+      ctx.strokeStyle = isDimmed ? '#475569' : colorHex;
+      ctx.lineWidth = Math.max(1.2, 1.8 * scale);
       ctx.setLineDash([2 * scale, 2 * scale]);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      drawLabelBadge(ctx, x, badgeY, labelText, colorHex, subText, scale, false);
+      drawLabelBadge(ctx, x, badgeY, labelText, colorHex, subText, scale, false, isDimmed);
     }
 
     ctx.restore();
@@ -421,37 +465,60 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     size: number = 10,
     showLabel: boolean,
     subText?: string,
-    scale: number = 1.6
+    scale: number = 1.6,
+    isDimmed: boolean = false
   ) => {
     ctx.save();
 
     const iconRadius = Math.max((size + 5) * scale, 19 * scale);
 
-    // Cyan / Electric Amber outer glow
-    ctx.shadowColor = '#06b6d4';
-    ctx.shadowBlur = 12 * scale;
+    if (isDimmed) {
+      ctx.shadowColor = 'transparent';
+      ctx.beginPath();
+      ctx.arc(x, y, iconRadius, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+      ctx.fill();
 
-    // Dark octagonal / circular electrical enclosure base
-    ctx.beginPath();
-    ctx.arc(x, y, iconRadius, 0, Math.PI * 2);
-    ctx.fillStyle = '#08142c'; // High-tech electric navy
-    ctx.fill();
+      // Outer ring -> dim gray
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = Math.max(1.5, 2 * scale);
+      ctx.stroke();
 
-    ctx.shadowColor = 'transparent';
+      // Secondary concentric ring -> dim gray
+      ctx.beginPath();
+      ctx.arc(x, y, iconRadius + 5 * scale, 0, Math.PI * 2);
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = Math.max(0.8, 1 * scale);
+      ctx.setLineDash([4 * scale, 3 * scale]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      // Cyan / Electric Amber outer glow
+      ctx.shadowColor = '#06b6d4';
+      ctx.shadowBlur = 12 * scale;
 
-    // Outer neon ring
-    ctx.strokeStyle = '#06b6d4';
-    ctx.lineWidth = Math.max(2.5, 3 * scale);
-    ctx.stroke();
+      // Dark octagonal / circular electrical enclosure base
+      ctx.beginPath();
+      ctx.arc(x, y, iconRadius, 0, Math.PI * 2);
+      ctx.fillStyle = '#08142c'; // High-tech electric navy
+      ctx.fill();
 
-    // Secondary concentric circuit locator ring
-    ctx.beginPath();
-    ctx.arc(x, y, iconRadius + 5 * scale, 0, Math.PI * 2);
-    ctx.strokeStyle = colorHex;
-    ctx.lineWidth = Math.max(1.2, 1.5 * scale);
-    ctx.setLineDash([4 * scale, 3 * scale]);
-    ctx.stroke();
-    ctx.setLineDash([]);
+      ctx.shadowColor = 'transparent';
+
+      // Outer neon ring
+      ctx.strokeStyle = '#06b6d4';
+      ctx.lineWidth = Math.max(2.5, 3 * scale);
+      ctx.stroke();
+
+      // Secondary concentric circuit locator ring
+      ctx.beginPath();
+      ctx.arc(x, y, iconRadius + 5 * scale, 0, Math.PI * 2);
+      ctx.strokeStyle = colorHex;
+      ctx.lineWidth = Math.max(1.2, 1.5 * scale);
+      ctx.setLineDash([4 * scale, 3 * scale]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     // DRAW SPECIALIZED ELECTRICAL VECTOR ICON INSIDE
     ctx.save();
@@ -462,6 +529,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     const upperLabel = labelText.toUpperCase();
     const isTD = nodeType === 'tablero' || upperLabel.startsWith('TD');
     const isTR = nodeType === 'transformador' || upperLabel.startsWith('TR');
+    const isBarrajes = nodeType === 'barrajes_elastomericos' || nodeType === 'barraje' || upperLabel.startsWith('BE') || upperLabel.startsWith('BAR');
+    const isContador = nodeType === 'contador_electrico' || nodeType === 'contador' || nodeType === 'medidor' || upperLabel.startsWith('MED') || upperLabel.startsWith('CNT');
     const isLUM = nodeType === 'luminaria' || upperLabel.startsWith('LUM');
     const isSPT = nodeType === 'spt' || upperLabel.startsWith('SPT');
 
@@ -471,12 +540,12 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       ctx.roundRect(boxX, boxY, boxSize, boxSize, 2 * scale);
       ctx.fillStyle = '#1e293b';
       ctx.fill();
-      ctx.strokeStyle = '#38bdf8';
+      ctx.strokeStyle = isDimmed ? '#64748b' : '#38bdf8';
       ctx.lineWidth = Math.max(1, 1.5 * scale);
       ctx.stroke();
 
       // Breakers rows
-      ctx.fillStyle = '#f59e0b';
+      ctx.fillStyle = isDimmed ? '#475569' : '#f59e0b';
       const bW = 2 * scale;
       const bH = 3.5 * scale;
       ctx.fillRect(boxX + 2.5 * scale, boxY + 2.5 * scale, bW, bH);
@@ -493,43 +562,144 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       ctx.lineTo(x + 0.5 * scale, y + 1 * scale);
       ctx.lineTo(x - 1.5 * scale, y + 1 * scale);
       ctx.closePath();
-      ctx.fillStyle = '#38bdf8';
+      ctx.fillStyle = isDimmed ? '#64748b' : '#38bdf8';
       ctx.fill();
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = isDimmed ? '#94a3b8' : '#ffffff';
       ctx.lineWidth = 0.8 * scale;
       ctx.stroke();
     } else if (isTR) {
-      // 2. TRANSFORMER CORE (Transformador / TR)
-      // Inductive coils (Two overlapping circles)
-      const rCoil = 4.5 * scale;
+      // 2. TRANSFORMER SUBSTATION (Transformador / TR 🔋)
+      // Main transformer tank housing
       ctx.beginPath();
-      ctx.arc(x - 2.5 * scale, y, rCoil, 0, Math.PI * 2);
-      ctx.strokeStyle = '#f59e0b';
+      ctx.roundRect(boxX + 0.5 * scale, boxY + 1 * scale, boxSize - 1 * scale, boxSize - 2 * scale, 2 * scale);
+      ctx.fillStyle = isDimmed ? '#1e293b' : '#1e1b4b'; // Deep sub-station indigo
+      ctx.fill();
+      ctx.strokeStyle = isDimmed ? '#64748b' : '#f59e0b';
+      ctx.lineWidth = 1.6 * scale;
+      ctx.stroke();
+
+      // Inductive transformer magnetic coils (Two overlapping primary & secondary loops)
+      const rCoil = 4.2 * scale;
+      ctx.beginPath();
+      ctx.arc(x - 2.5 * scale, y + 0.5 * scale, rCoil, 0, Math.PI * 2);
+      ctx.strokeStyle = isDimmed ? '#64748b' : '#fbbf24'; // Primary winding gold
       ctx.lineWidth = 1.8 * scale;
       ctx.stroke();
 
       ctx.beginPath();
-      ctx.arc(x + 2.5 * scale, y, rCoil, 0, Math.PI * 2);
-      ctx.strokeStyle = '#06b6d4';
+      ctx.arc(x + 2.5 * scale, y + 0.5 * scale, rCoil, 0, Math.PI * 2);
+      ctx.strokeStyle = isDimmed ? '#475569' : '#38bdf8'; // Secondary winding cyan
       ctx.lineWidth = 1.8 * scale;
       ctx.stroke();
 
-      // Bushings terminal tags
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(x - 4 * scale, y - rCoil - 2 * scale, 1.5 * scale, 2 * scale);
-      ctx.fillRect(x + 2.5 * scale, y - rCoil - 2 * scale, 1.5 * scale, 2 * scale);
+      // Top High Voltage Bushing Terminals (MT Bushings)
+      ctx.fillStyle = isDimmed ? '#475569' : '#f59e0b';
+      ctx.fillRect(x - 4.5 * scale, boxY - 1 * scale, 1.8 * scale, 2.5 * scale);
+      ctx.fillRect(x - 0.9 * scale, boxY - 1 * scale, 1.8 * scale, 2.5 * scale);
+      ctx.fillRect(x + 2.7 * scale, boxY - 1 * scale, 1.8 * scale, 2.5 * scale);
+
+      // Spark symbol in core center
+      ctx.fillStyle = isDimmed ? '#94a3b8' : '#ffffff';
+      ctx.font = `bold ${Math.round(7 * scale)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('⚡', x, y + 0.5 * scale);
+    } else if (isBarrajes) {
+      // 3. ELASTOMERIC BUSBAR / PREMOLDED JUNCTIONS (Barrajes Elastoméricos / BE 🪢)
+      // Outer elastomer modular jacket
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY + 2 * scale, boxSize, boxSize - 4 * scale, 3 * scale);
+      ctx.fillStyle = isDimmed ? '#1e293b' : '#2e1065'; // Premium elastomer purple
+      ctx.fill();
+      ctx.strokeStyle = isDimmed ? '#64748b' : '#c084fc';
+      ctx.lineWidth = 1.5 * scale;
+      ctx.stroke();
+
+      // Central Copper Busbar Spine
+      ctx.fillStyle = isDimmed ? '#475569' : '#f59e0b';
+      ctx.fillRect(boxX + 2 * scale, y - 1 * scale, boxSize - 4 * scale, 2 * scale);
+
+      // Premolded T-Body Boots / 3-Way Insulated Sleeves
+      const bootW = 3.2 * scale;
+      const bootH = 4.2 * scale;
+      
+      // Top boot entry
+      ctx.fillStyle = isDimmed ? '#334155' : '#a855f7';
+      ctx.beginPath();
+      ctx.roundRect(x - bootW / 2, boxY - 0.5 * scale, bootW, bootH, 1 * scale);
+      ctx.fill();
+      ctx.strokeStyle = isDimmed ? '#64748b' : '#f3e8ff';
+      ctx.lineWidth = 0.8 * scale;
+      ctx.stroke();
+
+      // Bottom left & right tap boots
+      ctx.fillStyle = isDimmed ? '#334155' : '#9333ea';
+      ctx.beginPath();
+      ctx.roundRect(x - 5 * scale, y + 1 * scale, 3 * scale, 4.5 * scale, 1 * scale);
+      ctx.roundRect(x + 2 * scale, y + 1 * scale, 3 * scale, 4.5 * scale, 1 * scale);
+      ctx.fill();
+      ctx.strokeStyle = isDimmed ? '#64748b' : '#e9d5ff';
+      ctx.lineWidth = 0.8 * scale;
+      ctx.stroke();
+
+      // Gold Terminal Contact Studs
+      ctx.fillStyle = isDimmed ? '#64748b' : '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(x, boxY + 1 * scale, 1.2 * scale, 0, Math.PI * 2);
+      ctx.arc(x - 3.5 * scale, y + 3.5 * scale, 1.2 * scale, 0, Math.PI * 2);
+      ctx.arc(x + 3.5 * scale, y + 3.5 * scale, 1.2 * scale, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (isContador) {
+      // 4. ELECTRIC ENERGY METER / KWH COUNTER (Contador Eléctrico / MED ⏱️)
+      // Circular / Rounded Meter Enclosure
+      ctx.beginPath();
+      ctx.roundRect(boxX + 0.5 * scale, boxY + 0.5 * scale, boxSize - 1 * scale, boxSize - 1 * scale, 3 * scale);
+      ctx.fillStyle = isDimmed ? '#1e293b' : '#064e3b'; // Deep emerald metering enclosure
+      ctx.fill();
+      ctx.strokeStyle = isDimmed ? '#64748b' : '#34d399';
+      ctx.lineWidth = 1.6 * scale;
+      ctx.stroke();
+
+      // Meter LCD / Digital Display Window
+      const screenW = boxSize - 4 * scale;
+      const screenH = 4.5 * scale;
+      ctx.fillStyle = '#022c22';
+      ctx.fillRect(x - screenW / 2, boxY + 2.5 * scale, screenW, screenH);
+      ctx.strokeStyle = isDimmed ? '#334155' : '#10b981';
+      ctx.lineWidth = 0.8 * scale;
+      ctx.strokeRect(x - screenW / 2, boxY + 2.5 * scale, screenW, screenH);
+
+      // Digital kWh read text / segments
+      ctx.fillStyle = isDimmed ? '#64748b' : '#6ee7b7';
+      ctx.font = `bold ${Math.round(3.8 * scale)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('0842.5', x, boxY + 4.8 * scale);
+
+      // Rotating disc / Load Status indicator
+      ctx.beginPath();
+      ctx.arc(x, y + 3 * scale, 2.5 * scale, 0, Math.PI * 2);
+      ctx.strokeStyle = isDimmed ? '#475569' : '#34d399';
+      ctx.lineWidth = 1 * scale;
+      ctx.stroke();
+
+      // Optical Pulse Blinking LED
+      ctx.beginPath();
+      ctx.arc(x + 4 * scale, y + 3 * scale, 1 * scale, 0, Math.PI * 2);
+      ctx.fillStyle = isDimmed ? '#64748b' : '#ef4444';
+      ctx.fill();
     } else if (isLUM) {
-      // 3. LUMINAIRE / LIGHTING FIXTURE (Luminaria / LUM)
+      // 5. LUMINAIRE / LIGHTING FIXTURE (Luminaria / LUM 💡)
       ctx.beginPath();
       ctx.arc(x, y - 1 * scale, 4.5 * scale, 0, Math.PI * 2);
-      ctx.fillStyle = '#fef08a';
+      ctx.fillStyle = isDimmed ? '#334155' : '#fef08a';
       ctx.fill();
-      ctx.strokeStyle = '#f59e0b';
+      ctx.strokeStyle = isDimmed ? '#64748b' : '#f59e0b';
       ctx.lineWidth = 1.5 * scale;
       ctx.stroke();
 
       // Light beam rays
-      ctx.strokeStyle = '#fef08a';
+      ctx.strokeStyle = isDimmed ? '#475569' : '#fef08a';
       ctx.lineWidth = 1.2 * scale;
       for (let i = 0; i < 6; i++) {
         const ang = (i * Math.PI) / 3;
@@ -539,8 +709,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         ctx.stroke();
       }
     } else if (isSPT) {
-      // 4. GROUNDING SYSTEM (Puesta a tierra / SPT ⏚)
-      ctx.strokeStyle = '#10b981';
+      // 6. GROUNDING SYSTEM (Puesta a tierra / SPT ⏚)
+      ctx.strokeStyle = isDimmed ? '#64748b' : '#10b981';
       ctx.lineWidth = 2 * scale;
       ctx.beginPath();
       ctx.moveTo(x, boxY + 2 * scale);
@@ -557,19 +727,19 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       ctx.lineTo(x + 2 * scale, y + 5 * scale);
       ctx.stroke();
     } else {
-      // 5. ELECTRICAL JUNCTION / CHAMBER (Cámara Eléctrica CE / Caja CP)
+      // 7. ELECTRICAL JUNCTION / CHAMBER (Cámara Eléctrica CE / Caja CP)
       ctx.beginPath();
       ctx.roundRect(boxX, boxY, boxSize, boxSize, 2 * scale);
-      ctx.fillStyle = '#0369a1';
+      ctx.fillStyle = isDimmed ? '#1e293b' : '#0369a1';
       ctx.fill();
-      ctx.strokeStyle = '#38bdf8';
+      ctx.strokeStyle = isDimmed ? '#64748b' : '#38bdf8';
       ctx.lineWidth = 1.5 * scale;
       ctx.stroke();
 
       // Terminal blocks inside
-      ctx.fillStyle = '#f8fafc';
+      ctx.fillStyle = isDimmed ? '#334155' : '#f8fafc';
       ctx.fillRect(boxX + 2 * scale, y - 1 * scale, boxSize - 4 * scale, 2 * scale);
-      ctx.fillStyle = '#f59e0b';
+      ctx.fillStyle = isDimmed ? '#64748b' : '#f59e0b';
       ctx.beginPath();
       ctx.arc(x, y, 2.5 * scale, 0, Math.PI * 2);
       ctx.fill();
@@ -584,10 +754,10 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
     ctx.beginPath();
     ctx.arc(statusX, statusY, 4.5 * scale, 0, Math.PI * 2);
-    ctx.fillStyle = colorHex;
+    ctx.fillStyle = isDimmed ? '#64748b' : colorHex;
     ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = Math.max(1.5, 1.8 * scale);
+    ctx.strokeStyle = isDimmed ? '#475569' : '#ffffff';
+    ctx.lineWidth = Math.max(1.2, 1.8 * scale);
     ctx.stroke();
 
     // Label Badge below
@@ -597,13 +767,13 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       ctx.beginPath();
       ctx.moveTo(x, y + iconRadius + 2 * scale);
       ctx.lineTo(x, badgeY - 10 * scale);
-      ctx.strokeStyle = '#06b6d4';
-      ctx.lineWidth = Math.max(1.5, 1.8 * scale);
+      ctx.strokeStyle = isDimmed ? '#475569' : '#06b6d4';
+      ctx.lineWidth = Math.max(1.2, 1.8 * scale);
       ctx.setLineDash([2 * scale, 2 * scale]);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      drawLabelBadge(ctx, x, badgeY, `⚡ ${labelText}`, colorHex, subText, scale, true);
+      drawLabelBadge(ctx, x, badgeY, `⚡ ${labelText}`, colorHex, subText, scale, true, isDimmed);
     }
 
     ctx.restore();
@@ -626,68 +796,106 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     cables?: string,
     scale: number = 1.6,
     acta?: string,
-    isElectric: boolean = false
+    isElectric: boolean = false,
+    isDimmed: boolean = false
   ) => {
     ctx.save();
 
     if (isElectric) {
       // --- ELECTRICAL CIRCUIT / FEEDER LINE STYLING ---
-      // 1. Electric Glow Shadow
-      ctx.shadowColor = '#06b6d4';
-      ctx.shadowBlur = 8 * scale;
+      if (isDimmed) {
+        ctx.shadowColor = 'transparent';
 
-      // 2. High-Tech Cable Conduit Casing
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.strokeStyle = '#08142c';
-      ctx.lineWidth = Math.max(8, 11 * scale);
-      ctx.lineCap = 'round';
-      ctx.stroke();
+        // 2. High-Tech Cable Conduit Casing in dim slate
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.65)';
+        ctx.lineWidth = Math.max(6, 8 * scale);
+        ctx.lineCap = 'round';
+        ctx.stroke();
 
-      ctx.shadowColor = 'transparent';
+        // 3. Main Cable Conductor Body in dim gray
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = Math.max(2.5, 3.5 * scale);
+        ctx.lineCap = 'round';
+        ctx.stroke();
 
-      // 3. Main Glowing Cable Conductor Body
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.strokeStyle = colorHex === '#94a3b8' ? '#06b6d4' : colorHex;
-      ctx.lineWidth = Math.max(4, 5.5 * scale);
-      ctx.lineCap = 'round';
-      ctx.stroke();
+        // 4. Electric Pulse Dash Line in faint gray
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)';
+        ctx.lineWidth = Math.max(1, 1.2 * scale);
+        ctx.setLineDash([4 * scale, 6 * scale]);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else {
+        // 1. Electric Glow Shadow
+        ctx.shadowColor = '#06b6d4';
+        ctx.shadowBlur = 8 * scale;
 
-      // 4. Electric Pulse Dash Line
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = Math.max(1.2, 2 * scale);
-      ctx.setLineDash([4 * scale, 6 * scale]);
-      ctx.lineCap = 'round';
-      ctx.stroke();
-      ctx.setLineDash([]);
+        // 2. High-Tech Cable Conduit Casing
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = '#08142c';
+        ctx.lineWidth = Math.max(8, 11 * scale);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        ctx.shadowColor = 'transparent';
+
+        // 3. Main Glowing Cable Conductor Body
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = colorHex === '#94a3b8' ? '#06b6d4' : colorHex;
+        ctx.lineWidth = Math.max(4, 5.5 * scale);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // 4. Electric Pulse Dash Line
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = Math.max(1.2, 2 * scale);
+        ctx.setLineDash([4 * scale, 6 * scale]);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
       // 5. Electric Terminal Node Blocks
       const drawElectricTerminal = (nx: number, ny: number) => {
         ctx.save();
-        ctx.shadowColor = '#06b6d4';
-        ctx.shadowBlur = 6 * scale;
+        if (isDimmed) {
+          ctx.shadowColor = 'transparent';
+        } else {
+          ctx.shadowColor = '#06b6d4';
+          ctx.shadowBlur = 6 * scale;
+        }
 
         const nodeRadius = Math.max(6, 8.5 * scale);
         ctx.beginPath();
         ctx.arc(nx, ny, nodeRadius, 0, Math.PI * 2);
-        ctx.fillStyle = '#08142c';
+        ctx.fillStyle = isDimmed ? 'rgba(15, 23, 42, 0.8)' : '#08142c';
         ctx.fill();
 
         ctx.shadowColor = 'transparent';
-        ctx.strokeStyle = '#06b6d4';
-        ctx.lineWidth = Math.max(1.5, 2.2 * scale);
+        ctx.strokeStyle = isDimmed ? '#64748b' : '#06b6d4';
+        ctx.lineWidth = isDimmed ? Math.max(1, 1.5 * scale) : Math.max(1.5, 2.2 * scale);
         ctx.stroke();
 
         // ⚡ symbol dot
         ctx.beginPath();
         ctx.arc(nx, ny, nodeRadius * 0.4, 0, Math.PI * 2);
-        ctx.fillStyle = '#f59e0b';
+        ctx.fillStyle = isDimmed ? '#64748b' : '#f59e0b';
         ctx.fill();
 
         ctx.restore();
@@ -711,64 +919,101 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           if (parts.length > 0) subStr = parts.join(' | ');
         }
 
-        drawLabelBadge(ctx, midX, midY, `⚡ ${label} (${meters || 0}m)${photoStr}`, colorHex, subStr, scale, true);
+        drawLabelBadge(ctx, midX, midY, `⚡ ${label} (${meters || 0}m)${photoStr}`, colorHex, subStr, scale, true, isDimmed);
       }
     } else {
       // --- CIVIL CONDUIT / TRENCH DUCT BANK STYLING ---
-      // 1. Outer Conduit Pipe Casing (Dark slate background with glow)
-      ctx.shadowColor = colorHex;
-      ctx.shadowBlur = 6 * scale;
+      if (isDimmed) {
+        ctx.shadowColor = 'transparent';
 
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = Math.max(8, 12 * scale);
-      ctx.lineCap = 'round';
-      ctx.stroke();
+        // Outer Conduit Pipe Casing in dim slate
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.65)';
+        ctx.lineWidth = Math.max(6, 8 * scale);
+        ctx.lineCap = 'round';
+        ctx.stroke();
 
-      ctx.shadowColor = 'transparent';
+        // Main Pipe Body in dim gray
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = Math.max(2.5, 3.5 * scale);
+        ctx.lineCap = 'round';
+        ctx.stroke();
 
-      // 2. Main Pipe Body
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.strokeStyle = colorHex;
-      ctx.lineWidth = Math.max(4, 6 * scale);
-      ctx.lineCap = 'round';
-      ctx.stroke();
+        // Inner Duct Core Stripe in faint gray
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+        ctx.lineWidth = Math.max(0.8, 1 * scale);
+        ctx.setLineDash([6 * scale, 5 * scale]);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else {
+        // 1. Outer Conduit Pipe Casing (Dark slate background with glow)
+        ctx.shadowColor = colorHex;
+        ctx.shadowBlur = 6 * scale;
 
-      // 3. Inner Duct Core Stripe
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.lineWidth = Math.max(1, 2 * scale);
-      ctx.setLineDash([6 * scale, 5 * scale]);
-      ctx.lineCap = 'round';
-      ctx.stroke();
-      ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = Math.max(8, 12 * scale);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        ctx.shadowColor = 'transparent';
+
+        // 2. Main Pipe Body
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = colorHex;
+        ctx.lineWidth = Math.max(4, 6 * scale);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // 3. Inner Duct Core Stripe
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.lineWidth = Math.max(1, 2 * scale);
+        ctx.setLineDash([6 * scale, 5 * scale]);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
       // 4. Terminal Connection Boxes
       const drawTerminalNode = (nx: number, ny: number) => {
         ctx.save();
-        ctx.shadowColor = colorHex;
-        ctx.shadowBlur = 4 * scale;
+        if (isDimmed) {
+          ctx.shadowColor = 'transparent';
+        } else {
+          ctx.shadowColor = colorHex;
+          ctx.shadowBlur = 4 * scale;
+        }
 
         const nodeRadius = Math.max(6, 8.5 * scale);
         ctx.beginPath();
         ctx.arc(nx, ny, nodeRadius, 0, Math.PI * 2);
-        ctx.fillStyle = '#0f172a';
+        ctx.fillStyle = isDimmed ? 'rgba(15, 23, 42, 0.8)' : '#0f172a';
         ctx.fill();
 
         ctx.shadowColor = 'transparent';
-        ctx.strokeStyle = colorHex;
-        ctx.lineWidth = Math.max(1.5, 2.2 * scale);
+        ctx.strokeStyle = isDimmed ? '#64748b' : colorHex;
+        ctx.lineWidth = isDimmed ? Math.max(1, 1.5 * scale) : Math.max(1.5, 2.2 * scale);
         ctx.stroke();
 
         ctx.beginPath();
         ctx.arc(nx, ny, nodeRadius * 0.35, 0, Math.PI * 2);
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = isDimmed ? '#64748b' : '#ffffff';
         ctx.fill();
 
         ctx.restore();
@@ -792,7 +1037,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           if (parts.length > 0) subStr = parts.join(' | ');
         }
 
-        drawLabelBadge(ctx, midX, midY, `${label} (${meters || 0}m)${photoStr}`, colorHex, subStr, scale, false);
+        drawLabelBadge(ctx, midX, midY, `${label} (${meters || 0}m)${photoStr}`, colorHex, subStr, scale, false, isDimmed);
       }
     }
 
@@ -1125,8 +1370,21 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
     // 6. Inspection Elements (Conduit lines, Cameras & Electrical Nodes, respecting layer visibility)
     const visibleElements = elements.filter(isElementVisible);
+    const activeNormalized = normalizeLayer(activeLayer);
 
-    visibleElements.forEach(baseEl => {
+    // Split elements: background dimmed elements vs active foreground elements
+    const dimmedElements = visibleElements.filter(el => {
+      const layerMatches = normalizeLayer(el.layer) === activeNormalized;
+      const statusMatches = statusFilter === 'all' || el.status === statusFilter;
+      return !(layerMatches && statusMatches);
+    });
+    const activeElements = visibleElements.filter(el => {
+      const layerMatches = normalizeLayer(el.layer) === activeNormalized;
+      const statusMatches = statusFilter === 'all' || el.status === statusFilter;
+      return layerMatches && statusMatches;
+    });
+
+    const renderElement = (baseEl: InspectionElement, isDimmed: boolean) => {
       // Apply real-time drag offsets if this element is currently being dragged
       let el = baseEl;
       if (draggedElementRef.current && draggedElementRef.current.id === baseEl.id) {
@@ -1178,7 +1436,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           el.cables,
           iconScale,
           el.acta,
-          isElectric
+          isElectric,
+          isDimmed
         );
       } else if (el.type === 'camera') {
         const photoStr = pCount > 0 ? ` 📷${pCount}` : '';
@@ -1187,12 +1446,18 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         const statusLabel = el.status === 'En proceso' && el.progressPercent !== undefined ? `En proceso (${el.progressPercent}%)` : el.status;
 
         if (isElectric) {
-          drawElectricNodeBadge(ctx, el.x, el.y, `${el.label}${photoStr}`, colorHex, statusLabel, el.electricNodeType || 'tablero', el.size || 10, showCameraLabels, camSubStr, iconScale);
+          drawElectricNodeBadge(ctx, el.x, el.y, `${el.label}${photoStr}`, colorHex, statusLabel, el.electricNodeType || 'tablero', el.size || 10, showCameraLabels, camSubStr, iconScale, isDimmed);
         } else {
-          drawCameraBadge(ctx, el.x, el.y, `${el.label}${photoStr}`, colorHex, statusLabel, el.size || 10, showCameraLabels, camSubStr, iconScale);
+          drawCameraBadge(ctx, el.x, el.y, `${el.label}${photoStr}`, colorHex, statusLabel, el.size || 10, showCameraLabels, camSubStr, iconScale, isDimmed);
         }
       }
-    });
+    };
+
+    // 1st Pass: Render inactive layer in soft dim gray (gris tenue) as background reference
+    dimmedElements.forEach(el => renderElement(el, true));
+
+    // 2nd Pass: Render active layer elements with full vibrancy and focus
+    activeElements.forEach(el => renderElement(el, false));
 
     // 7. Straight Line Preview
     const straightPreview = straightLinePreviewRef.current;
@@ -1285,6 +1550,50 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       });
     }
 
+    // 9. Selected Element High-Visibility Locator Ring (for mobile inspector)
+    if (selectedElementId) {
+      const selectedEl = visibleElements.find(e => e.id === selectedElementId);
+      if (selectedEl) {
+        ctx.save();
+        if (selectedEl.type === 'camera') {
+          const baseRad = Math.max((selectedEl.size || 10) + 6, 18) * iconScale;
+          // Outer glowing amber/gold halo
+          ctx.beginPath();
+          ctx.arc(selectedEl.x, selectedEl.y, baseRad + 10 * iconScale, 0, Math.PI * 2);
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = 3;
+          ctx.shadowColor = '#f59e0b';
+          ctx.shadowBlur = 16;
+          ctx.stroke();
+
+          // Crosshair indicators
+          const crossLen = 8 * iconScale;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(selectedEl.x, selectedEl.y - baseRad - crossLen - 4);
+          ctx.lineTo(selectedEl.x, selectedEl.y - baseRad - 4);
+          ctx.moveTo(selectedEl.x, selectedEl.y + baseRad + 4);
+          ctx.lineTo(selectedEl.x, selectedEl.y + baseRad + crossLen + 4);
+          ctx.moveTo(selectedEl.x - baseRad - crossLen - 4, selectedEl.y);
+          ctx.lineTo(selectedEl.x - baseRad - 4, selectedEl.y);
+          ctx.moveTo(selectedEl.x + baseRad + 4, selectedEl.y);
+          ctx.lineTo(selectedEl.x + baseRad + crossLen + 4, selectedEl.y);
+          ctx.stroke();
+        } else if (selectedEl.type === 'line' && selectedEl.x2 !== undefined && selectedEl.y2 !== undefined) {
+          ctx.beginPath();
+          ctx.moveTo(selectedEl.x, selectedEl.y);
+          ctx.lineTo(selectedEl.x2, selectedEl.y2);
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = Math.max(14, 18 * iconScale);
+          ctx.shadowColor = '#f59e0b';
+          ctx.shadowBlur = 14;
+          ctx.lineCap = 'round';
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
     ctx.restore();
   }, [
     blueprintImg,
@@ -1310,15 +1619,24 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     drawLabelBadge,
     iconScale,
     hoveredElementInfo,
-    isDraggingElement
+    isDraggingElement,
+    selectedElementId,
+    statusFilter
   ]);
 
-  // Find camera or line hit part at canvas coordinate (respecting visible elements only)
+  // Find camera or line hit part at canvas coordinate (respecting visible elements only, prioritizing active layer)
   const findHitPart = useCallback((x: number, y: number): { element: InspectionElement; part: 'camera' | 'line-start' | 'line-end' | 'line-body' } | null => {
     const visibleElements = elements.filter(isElementVisible);
+    const activeNormalized = normalizeLayer(activeLayer);
+
+    // Sort visible elements so active layer elements are tested first
+    const sortedElements = [
+      ...visibleElements.filter(e => normalizeLayer(e.layer) === activeNormalized),
+      ...visibleElements.filter(e => normalizeLayer(e.layer) !== activeNormalized)
+    ];
 
     // Check cameras & nodes first
-    for (const el of visibleElements) {
+    for (const el of sortedElements) {
       if (el.type === 'camera') {
         const radius = Math.max((el.size || 10) + 8, 20) * iconScale;
         if (Math.hypot(el.x - x, el.y - y) <= radius) {
@@ -1327,7 +1645,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       }
     }
     // Check lines (tramo / canalización / circuito)
-    for (const el of visibleElements) {
+    for (const el of sortedElements) {
       if (el.type === 'line' && el.x2 !== undefined && el.y2 !== undefined) {
         const handleRadius = Math.max(14, 16 * iconScale);
         if (Math.hypot(el.x - x, el.y - y) <= handleRadius) {
@@ -1344,7 +1662,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       }
     }
     return null;
-  }, [elements, iconScale, isElementVisible]);
+  }, [elements, iconScale, isElementVisible, activeLayer]);
 
   useEffect(() => {
     redraw();
@@ -1356,16 +1674,29 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    if (blueprintImg && blueprintImg.width > 0) {
-      if (canvas.width !== blueprintImg.width) canvas.width = blueprintImg.width;
-      if (canvas.height !== blueprintImg.height) canvas.height = blueprintImg.height;
-    } else {
-      const targetW = container.clientWidth || 1000;
-      const targetH = container.clientHeight || 650;
-      if (canvas.width !== targetW) canvas.width = targetW;
-      if (canvas.height !== targetH) canvas.height = targetH;
+    const updateSize = () => {
+      if (blueprintImg && blueprintImg.width > 0) {
+        if (canvas.width !== blueprintImg.width) canvas.width = blueprintImg.width;
+        if (canvas.height !== blueprintImg.height) canvas.height = blueprintImg.height;
+      } else {
+        const targetW = container.clientWidth || 1000;
+        const targetH = container.clientHeight || 650;
+        if (canvas.width !== targetW) canvas.width = targetW;
+        if (canvas.height !== targetH) canvas.height = targetH;
+      }
+      redraw();
+    };
+
+    updateSize();
+
+    if (window.ResizeObserver) {
+      const ro = new ResizeObserver(() => {
+        updateSize();
+      });
+      ro.observe(container);
+      return () => ro.disconnect();
     }
-  }, [blueprintImg]);
+  }, [blueprintImg, redraw]);
 
   // Mouse / Touch Event Handlers
   const activePointers = useRef(new Map<number, {x: number, y: number}>());
@@ -1464,6 +1795,20 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       const camLabel = `${camPrefix}${String(camCounter).padStart(2, '0')}`;
       const isElectric = activeLayer === 'electrica';
       
+      let nodeType: string | undefined = undefined;
+      if (isElectric) {
+        const p = camPrefix.toUpperCase();
+        if (p.startsWith('TR')) nodeType = 'transformador';
+        else if (p.startsWith('BE') || p.startsWith('BAR')) nodeType = 'barrajes_elastomericos';
+        else if (p.startsWith('MED') || p.startsWith('CNT')) nodeType = 'contador_electrico';
+        else if (p.startsWith('TD')) nodeType = 'tablero';
+        else if (p.startsWith('LUM')) nodeType = 'luminaria';
+        else if (p.startsWith('SPT')) nodeType = 'spt';
+        else if (p.startsWith('CP')) nodeType = 'caja_paso';
+        else if (p.startsWith('PF')) nodeType = 'punto_fuerza';
+        else nodeType = 'camara_electrica';
+      }
+      
       const newEl: InspectionElement = {
         id: Date.now() + Math.floor(Math.random() * 100000),
         type: 'camera',
@@ -1474,11 +1819,9 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         y: pos.y,
         size: 9,
         camType: isElectric ? undefined : camDefaultType,
-        electricNodeType: isElectric 
-          ? (camPrefix.startsWith('TD') ? 'tablero' : (camPrefix.startsWith('TR') ? 'transformador' : (camPrefix.startsWith('LUM') ? 'luminaria' : (camPrefix.startsWith('SPT') ? 'spt' : 'camara_electrica'))))
-          : undefined,
+        electricNodeType: nodeType,
         circuitTag: isElectric ? `ACOMETIDA-${camLabel}` : undefined,
-        voltage: 220,
+        voltage: nodeType === 'transformador' ? 13200 : (nodeType === 'barrajes_elastomericos' ? 13200 : 220),
         signalStrength: 90,
         date: new Date().toISOString().split('T')[0]
       };
@@ -1669,7 +2012,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   return (
     <div 
       ref={containerRef}
-      className={`relative w-full h-[650px] bg-slate-950 rounded-xl overflow-hidden shadow-inner border border-slate-800 ${getCursorClass()}`}
+      className={`relative bg-slate-950 rounded-xl overflow-hidden shadow-inner border border-slate-800 ${className || 'w-full h-[650px]'} ${getCursorClass()}`}
     >
       <canvas
         ref={canvasRef}

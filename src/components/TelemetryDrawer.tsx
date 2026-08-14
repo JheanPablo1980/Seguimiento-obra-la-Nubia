@@ -4,6 +4,7 @@ import { DEFAULT_CONTRACTUAL_ITEMS } from '../data/sampleData';
 import { supabaseAudit } from '../lib/supabase';
 import { adjustTramoMeters } from '../utils/tramoUtils';
 import { normalizeActa, getAvailableActas } from '../utils/actaUtils';
+import { normalizeLayer, ELECTRICAL_NODE_TYPES } from '../utils/layerUtils';
 import { ElementPhotoTimeline } from './ElementPhotoTimeline';
 import { getElementPhotoRecords } from '../utils/photoUtils';
 import { ClipboardList, Clock, X, ShieldCheck, Activity, AlertTriangle, Trash2, Calendar, Tag, Ruler, Wifi, Camera, Image, Eye, CalendarCheck, FileText, Plus, Minus, Move, History, Sparkles } from 'lucide-react';
@@ -117,7 +118,12 @@ export const TelemetryDrawer: React.FC<TelemetryDrawerProps> = ({
   }).length;
 
   return (
-    <div className="fixed inset-y-0 right-0 max-w-md w-full bg-slate-900 text-white shadow-2xl z-50 p-5 flex flex-col justify-between border-l border-slate-800 animate-in slide-in-from-right duration-200 overflow-y-auto">
+    <>
+      <div 
+        className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-[350] transition-opacity" 
+        onClick={onClose} 
+      />
+      <div className="fixed inset-y-0 right-0 max-w-lg w-full bg-slate-900 text-white shadow-2xl z-[360] p-4 sm:p-5 flex flex-col justify-between border-l border-slate-800 animate-in slide-in-from-right duration-200 overflow-y-auto pb-[max(24px,calc(env(safe-area-inset-bottom)+20px))]">
       <div className="flex flex-col gap-4">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -620,24 +626,75 @@ export const TelemetryDrawer: React.FC<TelemetryDrawerProps> = ({
 
           {element.type === 'camera' ? (
             <div className="flex flex-col gap-2.5 text-slate-300">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-slate-400 shrink-0">Norma de Caja:</span>
-                <select
-                  value={element.camType || 'SB850'}
-                  onChange={(e) => onUpdateElement({ ...element, camType: e.target.value as CameraNorm, lastUpdate: new Date().toLocaleTimeString() })}
-                  className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-sky-300 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-sky-500"
-                >
-                  <option value="SB858">SB858 (Telecom)</option>
-                  <option value="SB850">SB850 (BT)</option>
-                  <option value="SB851">SB851 (MT)</option>
-                  <option value="SB853">SB853 (MT)</option>
-                </select>
-              </div>
+              {normalizeLayer(element.layer) === 'electrica' ? (
+                <>
+                  <div>
+                    <label className="text-[10px] text-cyan-400 font-bold block mb-1">Tipo de Nodo Eléctrico:</label>
+                    <select
+                      value={element.electricNodeType || 'tablero'}
+                      onChange={(e) => {
+                        const nextType = e.target.value;
+                        const matching = ELECTRICAL_NODE_TYPES.find(n => n.id === nextType);
+                        onUpdateElement({
+                          ...element,
+                          electricNodeType: nextType,
+                          voltage: nextType === 'transformador' || nextType === 'barrajes_elastomericos' ? 13200 : (element.voltage || 220),
+                          lastUpdate: new Date().toLocaleTimeString()
+                        });
+                      }}
+                      className="w-full bg-slate-950 border border-cyan-700/80 rounded-lg px-2.5 py-1.5 text-xs text-cyan-200 font-bold focus:outline-none focus:border-cyan-400 cursor-pointer"
+                    >
+                      {ELECTRICAL_NODE_TYPES.map(n => (
+                        <option key={n.id} value={n.id}>
+                          {n.icon} {n.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-0.5">Tag Circuito / Alimentador:</label>
+                      <input
+                        type="text"
+                        placeholder="Ej: ALIM-TR-01"
+                        value={element.circuitTag || ''}
+                        onChange={(e) => onUpdateElement({ ...element, circuitTag: e.target.value, lastUpdate: new Date().toLocaleTimeString() })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-cyan-300 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-0.5">Tensión Operación (V):</label>
+                      <input
+                        type="number"
+                        placeholder="220 / 13200"
+                        value={element.voltage || 220}
+                        onChange={(e) => onUpdateElement({ ...element, voltage: Number(e.target.value) || 0, lastUpdate: new Date().toLocaleTimeString() })}
+                        className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-amber-300 font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-slate-400 shrink-0">Norma de Caja:</span>
+                  <select
+                    value={element.camType || 'SB850'}
+                    onChange={(e) => onUpdateElement({ ...element, camType: e.target.value as CameraNorm, lastUpdate: new Date().toLocaleTimeString() })}
+                    className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-sky-300 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  >
+                    <option value="SB858">SB858 (Telecom)</option>
+                    <option value="SB850">SB850 (BT)</option>
+                    <option value="SB851">SB851 (MT)</option>
+                    <option value="SB853">SB853 (MT)</option>
+                  </select>
+                </div>
+              )}
 
               <div className="pt-1 border-t border-slate-700/60">
                 <div>
                   <label className="text-[10px] text-slate-400 block mb-0.5 flex items-center gap-1">
-                    <Wifi className="w-3 h-3 text-emerald-400" /> Nivel Prueba (%)
+                    <Wifi className="w-3 h-3 text-emerald-400" /> Nivel Prueba / Continuidad (%)
                   </label>
                   <input
                     type="number"
@@ -650,15 +707,17 @@ export const TelemetryDrawer: React.FC<TelemetryDrawerProps> = ({
                 </div>
               </div>
 
-              <div className="flex justify-between items-center bg-slate-950/80 p-2 rounded border border-slate-800">
-                <span className="text-slate-400 text-[11px]">Medidas de Norma:</span>
-                <span className="font-bold text-emerald-400 font-mono text-[11px]">
-                  {element.camType === 'SB858' && '0.9m × 0.9m'}
-                  {element.camType === 'SB850' && '1.3m × 1.3m'}
-                  {element.camType === 'SB851' && '1.5m × 1.5m'}
-                  {element.camType === 'SB853' && '2.6m × 1.5m'}
-                </span>
-              </div>
+              {normalizeLayer(element.layer) === 'civil' && (
+                <div className="flex justify-between items-center bg-slate-950/80 p-2 rounded border border-slate-800">
+                  <span className="text-slate-400 text-[11px]">Medidas de Norma:</span>
+                  <span className="font-bold text-emerald-400 font-mono text-[11px]">
+                    {element.camType === 'SB858' && '0.9m × 0.9m'}
+                    {element.camType === 'SB850' && '1.3m × 1.3m'}
+                    {element.camType === 'SB851' && '1.5m × 1.5m'}
+                    {element.camType === 'SB853' && '2.6m × 1.5m'}
+                  </span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-2.5 text-slate-300">
@@ -799,7 +858,8 @@ export const TelemetryDrawer: React.FC<TelemetryDrawerProps> = ({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 

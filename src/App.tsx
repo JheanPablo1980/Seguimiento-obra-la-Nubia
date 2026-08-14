@@ -11,8 +11,11 @@ import {
   AuthUser,
   GlobalConfig,
   ScheduleItem,
-  ProjectLayer
+  ProjectLayer,
+  ElementPhotoRecord,
+  StatusType
 } from './types';
+import { getElementPhotoRecords, syncElementPhotoRecords } from './utils/photoUtils';
 import { 
   INITIAL_PROJECT_META, 
   INITIAL_AREAS, 
@@ -41,6 +44,11 @@ import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { ScheduleProgressModal } from './components/ScheduleProgressModal';
 import { MemoriaCalculoModal } from './components/MemoriaCalculoModal';
 import { AiRecognitionModal } from './components/AiRecognitionModal';
+import { InspectorMobileBar } from './components/InspectorMobileBar';
+import { QuickAddModal } from './components/QuickAddModal';
+import { FieldInspectorHUD } from './components/FieldInspectorHUD';
+import { MobileInspectorSheet } from './components/MobileInspectorSheet';
+import { DWGFastViewBar } from './components/DWGFastViewBar';
 import { normalizeLayer } from './utils/layerUtils';
 import { CollapsibleModule } from './components/CollapsibleModule';
 
@@ -53,7 +61,7 @@ import {
   supabaseProjectMeta 
 } from './lib/supabase';
 
-import { CheckCircle2, AlertCircle, Building2, TrendingUp, BarChart3, Layers, Grid, Map as MapIcon, ClipboardList, Minimize2, Maximize2, LayoutGrid, HardHat } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Building2, TrendingUp, BarChart3, Layers, Grid, Map as MapIcon, ClipboardList, Minimize2, Maximize2, LayoutGrid, HardHat, Plus, Crosshair, Camera, Calendar, Hand, Ruler, Boxes, Highlighter, Eraser } from 'lucide-react';
 
 const ADMIN_EMAIL = 'jheanmurillo73@gmail.com';
 
@@ -223,6 +231,7 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isDailyTrackingModalOpen, setIsDailyTrackingModalOpen] = useState(false);
   const [isVersionHistoryModalOpen, setIsVersionHistoryModalOpen] = useState(false);
+  const [isQuickAddModalOpen, setIsQuickAddModalOpen] = useState(false);
 
   // Schedule / Cronograma Items State
   const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>(() => {
@@ -374,6 +383,7 @@ export default function App() {
   // Canvas Toolbar State
   const [currentTool, setCurrentTool] = useState<ToolType>('highlight');
   const [zoomLevel, setZoomLevel] = useState(1.0);
+  const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
 
   // Camera creation state
   const [camPrefix, setCamPrefix] = useState('C-');
@@ -388,9 +398,9 @@ export default function App() {
   const [iconScale, setIconScale] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('obra_icon_scale_v1');
-      return saved ? parseFloat(saved) : 1.6;
+      return saved ? parseFloat(saved) : 2.2;
     } catch (e) {
-      return 1.6;
+      return 2.2;
     }
   });
 
@@ -445,8 +455,10 @@ export default function App() {
     itemCount: 0
   });
 
-  // Inspection Drawer
+  // Inspection Drawer & Mobile Sheet
   const [inspectedElement, setInspectedElement] = useState<InspectionElement | null>(null);
+  const [inspectorStatusFilter, setInspectorStatusFilter] = useState<'all' | StatusType>('all');
+  const [isFullTelemetryOpen, setIsFullTelemetryOpen] = useState(false);
 
   // Data Backup Modal
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
@@ -581,6 +593,11 @@ export default function App() {
   };
 
   const handleAddElement = (element: InspectionElement) => {
+    if (appMode === 'field') {
+      showToast('En vista de inspector no está permitida la creación de nuevos elementos. Active el Modo Administrador.');
+      return;
+    }
+
     setElements(prev => [...prev, element]);
     if (element.type === 'camera') {
       setCamCounter(c => c + 1);
@@ -653,6 +670,11 @@ export default function App() {
   };
 
   const handleDeleteElement = (id: number) => {
+    if (appMode === 'field') {
+      showToast('En vista de inspector no está permitida la eliminación de entidades. Active el Modo Administrador.');
+      return;
+    }
+
     const targetEl = elements.find(e => e.id === id);
     setElements(prev => prev.filter(e => e.id !== id));
     if (inspectedElement && inspectedElement.id === id) {
@@ -737,17 +759,19 @@ export default function App() {
     // Erase strokes
     setStrokes(prev => prev.filter(s => !s.points.some(p => Math.hypot(p.x - point.x, p.y - point.y) < radius)));
 
-    // Erase elements
-    setElements(prev => prev.filter(el => {
-      if (el.type === 'camera') {
-        return Math.hypot(el.x - point.x, el.y - point.y) >= radius;
-      }
-      if (el.type === 'line' && el.x2 !== undefined && el.y2 !== undefined) {
-        const dist = pointToSegmentDistance(point.x, point.y, el.x, el.y, el.x2, el.y2);
-        return dist >= radius;
-      }
-      return true;
-    }));
+    // Erase elements only in admin mode
+    if (appMode !== 'field') {
+      setElements(prev => prev.filter(el => {
+        if (el.type === 'camera') {
+          return Math.hypot(el.x - point.x, el.y - point.y) >= radius;
+        }
+        if (el.type === 'line' && el.x2 !== undefined && el.y2 !== undefined) {
+          const dist = pointToSegmentDistance(point.x, point.y, el.x, el.y, el.x2, el.y2);
+          return dist >= radius;
+        }
+        return true;
+      }));
+    }
   };
 
   const pointToSegmentDistance = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
@@ -760,9 +784,75 @@ export default function App() {
 
   // Locate element on canvas
   const handleLocateElement = (element: InspectionElement) => {
+    setActiveTab('planos');
+    setFieldMobileTab('canvas');
+    setCollapsedModules(prev => ({ ...prev, canvas: false }));
     setZoomLevel(1.8);
     setInspectedElement(element);
-    showToast(`Ubicar ${element.label} en el plano`);
+    const targetLayer = normalizeLayer(element.layer);
+    if (targetLayer !== activeLayer) {
+      setActiveLayer(targetLayer);
+    }
+    showToast(`Ubicando ${element.label} en el plano`);
+  };
+
+  // Inspect element on canvas: stays on the plan, opens inspector sheet/drawer directly, and seamlessly updates
+  const handleInspectElementOnPlano = (element: InspectionElement) => {
+    setInspectedElement(element);
+    const targetLayer = normalizeLayer(element.layer);
+    if (targetLayer !== activeLayer) {
+      setActiveLayer(targetLayer);
+    }
+    showToast(`Elemento ${element.label} seleccionado`);
+  };
+
+  // Select element from canvas and navigate smoothly to Bitacora (DWG Fast View mode)
+  const handleSelectElementAndNavigateBitacora = (element: InspectionElement) => {
+    setInspectedElement(element);
+
+    // Switch active layer if element belongs to the other layer so it's visible in Bitacora
+    const targetLayer = normalizeLayer(element.layer);
+    if (targetLayer !== activeLayer) {
+      setActiveLayer(targetLayer);
+    }
+
+    // In field mode, mobile, or single tab view: switch immediately to bitácora
+    if (appMode === 'field' || isMobile || activeTab === 'planos') {
+      setActiveTab('bitacora');
+      setFieldMobileTab('bitacora');
+    }
+    
+    // Ensure bitacora module is uncollapsed so the user sees the table / cards immediately
+    setCollapsedModules(prev => ({ ...prev, bitacora: false }));
+    showToast(`Elemento ${element.label} seleccionado. Abriendo Bitácora`);
+  };
+
+  const handleReturnToPlan = (targetEl?: InspectionElement) => {
+    setActiveTab('planos');
+    setFieldMobileTab('canvas');
+    setCollapsedModules(prev => ({ ...prev, canvas: false }));
+    if (targetEl) {
+      handleLocateElement(targetEl);
+    } else {
+      showToast('Volviendo al Plano');
+    }
+  };
+
+  const handleManualCloudSync = async () => {
+    setSyncStatus('syncing');
+    try {
+      await Promise.all([
+        supabaseElements.saveAllElements(elements),
+        supabaseAreas.saveAreas(areas),
+        supabaseProjectMeta.saveMeta(projectMeta),
+        supabaseSchedule.saveScheduleItems(scheduleItems)
+      ]);
+      setSyncStatus('synced');
+      showToast('Datos sincronizados exitosamente con la nube');
+    } catch (e) {
+      setSyncStatus('offline');
+      showToast('Guardado localmente (sin conexión)');
+    }
   };
 
   // Area Sector Actions
@@ -871,6 +961,10 @@ export default function App() {
   };
 
   const handleDeleteAllElements = () => {
+    if (appMode === 'field') {
+      showToast('En vista de inspector no está permitida la eliminación de entidades. Active el Modo Administrador.');
+      return;
+    }
     if (elements.length === 0) return;
     setDeleteModalConfig({
       isOpen: true,
@@ -1001,193 +1095,197 @@ export default function App() {
         </div>
       )}
 
-      {/* Header */}
-      <Header syncStatus={syncStatus}
-        onFileUpload={handleFileUpload}
-        pdfDoc={pdfDoc}
-        currentPdfPage={currentPdfPage}
-        totalPdfPages={totalPdfPages}
-        onPrevPdfPage={handlePrevPdfPage}
-        onNextPdfPage={handleNextPdfPage}
-        onClearCanvas={() => {
-          setStrokes([]);
-          setCurrentAreaPoints([]);
-          showToast('Trazos y marcas del plano limpiados');
-        }}
-        onExportPDF={() => window.print()}
-        onOpenDataBackup={() => setIsBackupModalOpen(true)}
-        showCharts={showCharts}
-        onToggleCharts={() => setShowCharts(!showCharts)}
-        currentUser={currentUser}
-        onOpenAuthModal={() => setIsAuthModalOpen(true)}
-        onOpenDailyTrackingModal={() => setIsDailyTrackingModalOpen(true)}
-        appMode={appMode}
-        onOpenConfig={() => setIsConfigModalOpen(true)}
-        onOpenVersionHistory={() => setIsVersionHistoryModalOpen(true)}
-        onOpenScheduleProgress={(tab) => {
-          setScheduleInitialTab(tab || 'matrix');
-          setIsScheduleProgressModalOpen(true);
-        }}
-        onOpenMemoriaModal={(showImport) => {
-          setMemoriaInitialImport(!!showImport);
-          setIsMemoriaModalOpen(true);
-        }}
-        onOpenAiRecognition={() => setIsAiModalOpen(true)}
+      {/* Header - Only shown in Admin mode; Field/Inspector mode uses FieldInspectorHUD */}
+      {appMode === 'admin' && (
+        <Header syncStatus={syncStatus}
+          onFileUpload={handleFileUpload}
+          pdfDoc={pdfDoc}
+          currentPdfPage={currentPdfPage}
+          totalPdfPages={totalPdfPages}
+          onPrevPdfPage={handlePrevPdfPage}
+          onNextPdfPage={handleNextPdfPage}
+          onClearCanvas={() => {
+            setStrokes([]);
+            setCurrentAreaPoints([]);
+            showToast('Trazos y marcas del plano limpiados');
+          }}
+          onExportPDF={() => window.print()}
+          onOpenDataBackup={() => setIsBackupModalOpen(true)}
+          showCharts={showCharts}
+          onToggleCharts={() => setShowCharts(!showCharts)}
+          currentUser={currentUser}
+          onOpenAuthModal={() => setIsAuthModalOpen(true)}
+          onOpenDailyTrackingModal={() => setIsDailyTrackingModalOpen(true)}
+          appMode={appMode}
+          onOpenConfig={() => setIsConfigModalOpen(true)}
+          onOpenVersionHistory={() => setIsVersionHistoryModalOpen(true)}
+          onOpenScheduleProgress={(tab) => {
+            setScheduleInitialTab(tab || 'matrix');
+            setIsScheduleProgressModalOpen(true);
+          }}
+          onOpenMemoriaModal={(showImport) => {
+            setMemoriaInitialImport(!!showImport);
+            setIsMemoriaModalOpen(true);
+          }}
+          onOpenAiRecognition={() => setIsAiModalOpen(true)}
 
-        onToggleAppMode={() => {
-          const userEmail = currentUser?.email?.trim().toLowerCase() || '';
-          const isUserAdmin = userEmail === ADMIN_EMAIL.toLowerCase() || currentUser?.role === 'admin' ;
-          
-          if (appMode === 'field' && !isUserAdmin) {
-            setIsAuthModalOpen(true);
-            showToast(`Inicia sesión como ${ADMIN_EMAIL} para activar el Modo Administrador`);
-            return;
-          }
+          onToggleAppMode={() => {
+            const userEmail = currentUser?.email?.trim().toLowerCase() || '';
+            const isUserAdmin = userEmail === ADMIN_EMAIL.toLowerCase() || currentUser?.role === 'admin' ;
+            
+            if (appMode === 'field' && !isUserAdmin) {
+              setIsAuthModalOpen(true);
+              showToast(`Inicia sesión como ${ADMIN_EMAIL} para activar el Modo Administrador`);
+              return;
+            }
 
-          const nextMode = appMode === 'admin' ? 'field' : 'admin';
-          setAppMode(nextMode);
-          if (nextMode === 'field') {
-            setCurrentTool('pan');
-            setCollapsedModules(prev => ({ ...prev, canvas: false, bitacora: false }));
-            setFieldMobileTab('both');
-            showToast('Modo Inspección de Campo activado');
-          } else {
-            showToast('Modo Administrador activado (Edición y Configuración)');
-          }
-        }}
-        onExportAnnotatedBlueprintPNG={() => {
-          if (canvasRef.current) {
-            canvasRef.current.exportAnnotatedBlueprintPNG(projectMeta);
-            showToast('Plano anotado generado y descargado en PNG');
-          }
-        }}
-      />
+            const nextMode = appMode === 'admin' ? 'field' : 'admin';
+            setAppMode(nextMode);
+            if (nextMode === 'field') {
+              setCurrentTool('pan');
+              setCollapsedModules(prev => ({ ...prev, canvas: false, bitacora: false }));
+              setFieldMobileTab('both');
+              showToast('Modo Inspección de Campo activado');
+            } else {
+              showToast('Modo Administrador activado (Edición y Configuración)');
+            }
+          }}
+          onExportAnnotatedBlueprintPNG={() => {
+            if (canvasRef.current) {
+              canvasRef.current.exportAnnotatedBlueprintPNG(projectMeta);
+              showToast('Plano anotado generado y descargado en PNG');
+            }
+          }}
+        />
+      )}
 
-      {/* Quick Modules Collapse/Expand Control Bar */}
-      <div className="bg-slate-900/90 text-slate-200 border border-slate-800 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-sm text-xs no-print">
-        <div className="flex items-center gap-2">
-          <LayoutGrid className="w-4 h-4 text-sky-400" />
-          <span className="font-bold text-white uppercase tracking-wider text-[11px]">
-            Vista de Módulos
-          </span>
-          <span className="text-[10px] bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded font-mono font-bold">
-            {Object.values(collapsedModules).filter(Boolean).length} / {Object.keys(collapsedModules).length} contraídos
-          </span>
-        </div>
+      {/* Quick Modules Collapse/Expand Control Bar (Desktop Admin Only) */}
+      {appMode === 'admin' && !isMobile && (
+        <div className="bg-slate-900/90 text-slate-200 border border-slate-800 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-sm text-xs no-print">
+          <div className="flex items-center gap-2">
+            <LayoutGrid className="w-4 h-4 text-sky-400" />
+            <span className="font-bold text-white uppercase tracking-wider text-[11px]">
+              Vista de Módulos
+            </span>
+            <span className="text-[10px] bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded font-mono font-bold">
+              {Object.values(collapsedModules).filter(Boolean).length} / {Object.keys(collapsedModules).length} contraídos
+            </span>
+          </div>
 
-        {/* Quick Module Chips */}
-        <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
-          {appMode === 'admin' && (
+          {/* Quick Module Chips */}
+          <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+            {appMode === 'admin' && (
+              <button
+                onClick={() => toggleModule('meta')}
+                className={`px-2 py-1 rounded font-bold border transition ${
+                  !collapsedModules.meta
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                }`}
+                title="Mostrar/Ocultar Datos del Proyecto"
+              >
+                📋 Proyecto
+              </button>
+            )}
+
+            {appMode === 'admin' && (
+              <>
+                <button
+                  onClick={() => toggleModule('kpis')}
+                  className={`px-2 py-1 rounded font-bold border transition ${
+                    !collapsedModules.kpis
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                  }`}
+                  title="Mostrar/Ocultar Métricas e Indicadores KPI"
+                >
+                  📊 KPIs y Actas
+                </button>
+
+                <button
+                  onClick={() => toggleModule('charts')}
+                  className={`px-2 py-1 rounded font-bold border transition ${
+                    !collapsedModules.charts
+                      ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                  }`}
+                  title="Mostrar/Ocultar Gráficos de Inspección"
+                >
+                  📈 Gráficos
+                </button>
+
+                <button
+                  onClick={() => toggleModule('sectors')}
+                  className={`px-2 py-1 rounded font-bold border transition ${
+                    !collapsedModules.sectors
+                      ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                  }`}
+                  title="Mostrar/Ocultar Avance por Sectores"
+                >
+                  🗺️ Sectores
+                </button>
+
+                <button
+                  onClick={() => toggleModule('summaryTable')}
+                  className={`px-2 py-1 rounded font-bold border transition ${
+                    !collapsedModules.summaryTable
+                      ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                  }`}
+                  title="Mostrar/Ocultar Matriz Consolidada Sectorial"
+                >
+                  📑 Matriz
+                </button>
+              </>
+            )}
+
             <button
-              onClick={() => toggleModule('meta')}
+              onClick={() => toggleModule('canvas')}
               className={`px-2 py-1 rounded font-bold border transition ${
-                !collapsedModules.meta
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                !collapsedModules.canvas
+                  ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+              }`}
+              title="Mostrar/Ocultar Plano Interactivo"
+            >
+              📐 Plano
+            </button>
+
+            <button
+              onClick={() => toggleModule('bitacora')}
+              className={`px-2 py-1 rounded font-bold border transition ${
+                !collapsedModules.bitacora
+                  ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
                   : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
               }`}
-              title="Mostrar/Ocultar Datos del Proyecto"
+              title="Mostrar/Ocultar Bitácora de Registro"
             >
-              📋 Proyecto
+              📝 Bitácora
             </button>
-          )}
+          </div>
 
-          {appMode === 'admin' && (
-            <>
-              <button
-                onClick={() => toggleModule('kpis')}
-                className={`px-2 py-1 rounded font-bold border transition ${
-                  !collapsedModules.kpis
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-                }`}
-                title="Mostrar/Ocultar Métricas e Indicadores KPI"
-              >
-                📊 KPIs y Actas
-              </button>
-
-              <button
-                onClick={() => toggleModule('charts')}
-                className={`px-2 py-1 rounded font-bold border transition ${
-                  !collapsedModules.charts
-                    ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
-                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-                }`}
-                title="Mostrar/Ocultar Gráficos de Inspección"
-              >
-                📈 Gráficos
-              </button>
-
-              <button
-                onClick={() => toggleModule('sectors')}
-                className={`px-2 py-1 rounded font-bold border transition ${
-                  !collapsedModules.sectors
-                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-                }`}
-                title="Mostrar/Ocultar Avance por Sectores"
-              >
-                🗺️ Sectores
-              </button>
-
-              <button
-                onClick={() => toggleModule('summaryTable')}
-                className={`px-2 py-1 rounded font-bold border transition ${
-                  !collapsedModules.summaryTable
-                    ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
-                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-                }`}
-                title="Mostrar/Ocultar Matriz Consolidada Sectorial"
-              >
-                📑 Matriz
-              </button>
-            </>
-          )}
-
-          <button
-            onClick={() => toggleModule('canvas')}
-            className={`px-2 py-1 rounded font-bold border transition ${
-              !collapsedModules.canvas
-                ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-            }`}
-            title="Mostrar/Ocultar Plano Interactivo"
-          >
-            📐 Plano
-          </button>
-
-          <button
-            onClick={() => toggleModule('bitacora')}
-            className={`px-2 py-1 rounded font-bold border transition ${
-              !collapsedModules.bitacora
-                ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
-                : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-            }`}
-            title="Mostrar/Ocultar Bitácora de Registro"
-          >
-            📝 Bitácora
-          </button>
+          {/* Global Expand / Collapse Actions */}
+          <div className="flex items-center gap-1.5 shrink-0 border-l border-slate-800 pl-2">
+            <button
+              onClick={() => setAllModulesCollapse(false)}
+              className="px-2 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded font-bold flex items-center gap-1 transition text-[11px]"
+              title="Expandir todos los módulos de la aplicación"
+            >
+              <Maximize2 className="w-3 h-3" />
+              <span>Expandir Todos</span>
+            </button>
+            <button
+              onClick={() => setAllModulesCollapse(true)}
+              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-bold flex items-center gap-1 transition text-[11px] border border-slate-700"
+              title="Contraer todos los módulos de la aplicación"
+            >
+              <Minimize2 className="w-3 h-3" />
+              <span>Contraer Todos</span>
+            </button>
+          </div>
         </div>
-
-        {/* Global Expand / Collapse Actions */}
-        <div className="flex items-center gap-1.5 shrink-0 border-l border-slate-800 pl-2">
-          <button
-            onClick={() => setAllModulesCollapse(false)}
-            className="px-2 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded font-bold flex items-center gap-1 transition text-[11px]"
-            title="Expandir todos los módulos de la aplicación"
-          >
-            <Maximize2 className="w-3 h-3" />
-            <span>Expandir Todos</span>
-          </button>
-          <button
-            onClick={() => setAllModulesCollapse(true)}
-            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-bold flex items-center gap-1 transition text-[11px] border border-slate-700"
-            title="Contraer todos los módulos de la aplicación"
-          >
-            <Minimize2 className="w-3 h-3" />
-            <span>Contraer Todos</span>
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Project Meta Inputs Bar Module (Admin Mode Only) */}
       {appMode === 'admin' && (
@@ -1310,60 +1408,48 @@ export default function App() {
         </CollapsibleModule>
       )}
 
-      {/* Inspector Mode / Mobile View Control Sub-Bar */}
+      {/* Field Inspector Mobile HUD */}
       {(appMode === 'field' || isMobile) && (
-        <div className="bg-slate-900 text-white border border-slate-800 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 no-print shadow-md">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-amber-500 rounded-lg text-slate-950 font-black shrink-0">
-              <HardHat className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="text-xs font-bold text-amber-300 block">
-                {appMode === 'field' ? 'Panel de Campo / Inspector Móvil' : 'Vista Rápida Móvil'}
-              </span>
-              <span className="text-[11px] text-slate-400">
-                Acceso directo a Plano Interactivo y Bitácora de Registro
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center bg-slate-950 p-1 rounded-xl gap-1 border border-slate-800 text-xs w-full sm:w-auto justify-stretch sm:justify-end">
-            <button
-              onClick={() => handleSelectMobileTab('planos')}
-              className={`flex-1 sm:flex-none px-3 py-2 rounded-lg font-bold transition flex items-center justify-center gap-1.5 ${
-                activeTab === 'planos' || (fieldMobileTab === 'canvas' && activeTab !== 'dashboard')
-                  ? 'bg-amber-500 text-slate-950 shadow-sm'
-                  : 'text-slate-300 hover:text-white bg-slate-900/50'
-              }`}
-            >
-              <MapIcon className="w-4 h-4 text-amber-900 shrink-0" />
-              <span>📐 Plano Interactivo</span>
-            </button>
-
-            <button
-              onClick={() => handleSelectMobileTab('bitacora')}
-              className={`flex-1 sm:flex-none px-3 py-2 rounded-lg font-bold transition flex items-center justify-center gap-1.5 ${
-                activeTab === 'bitacora' || (fieldMobileTab === 'bitacora' && activeTab !== 'dashboard')
-                  ? 'bg-teal-500 text-slate-950 shadow-sm'
-                  : 'text-slate-300 hover:text-white bg-slate-900/50'
-              }`}
-            >
-              <ClipboardList className="w-4 h-4 text-teal-900 shrink-0" />
-              <span>📝 Bitácora ({elements.length})</span>
-            </button>
-
-            <button
-              onClick={() => handleSelectMobileTab('both')}
-              className={`flex-1 sm:flex-none px-3 py-2 rounded-lg font-bold transition flex items-center justify-center gap-1.5 ${
-                activeTab === 'dashboard' && fieldMobileTab === 'both'
-                  ? 'bg-slate-800 text-amber-300 border border-amber-500/40 shadow-sm'
-                  : 'text-slate-400 hover:text-white bg-slate-900/50'
-              }`}
-            >
-              <LayoutGrid className="w-4 h-4 text-sky-400 shrink-0" />
-              <span>📱 Ambos</span>
-            </button>
-          </div>
+        <div className="no-print">
+          <FieldInspectorHUD
+            currentUser={currentUser}
+            projectMeta={projectMeta}
+            activeLayer={activeLayer}
+            onChangeActiveLayer={setActiveLayer}
+            syncStatus={syncStatus}
+            elements={elements}
+            selectedElement={inspectedElement}
+            onSelectElement={setInspectedElement}
+            statusFilter={inspectorStatusFilter}
+            onChangeStatusFilter={setInspectorStatusFilter}
+            iconScale={iconScale}
+            onChangeIconScale={(s) => {
+              setIconScale(s);
+              showToast(`Íconos ajustados a ${s}x`);
+            }}
+            isFullscreen={isCanvasFullscreen}
+            onToggleFullscreen={() => setIsCanvasFullscreen(f => !f)}
+            onResetCenter={() => {
+              setZoomLevel(1.0);
+              if (canvasRef.current) {
+                canvasRef.current.resetView();
+              }
+              showToast('Plano centrado');
+            }}
+            onOpenDailyTracking={() => setIsDailyTrackingModalOpen(true)}
+            onToggleAdminMode={() => {
+              const userEmail = currentUser?.email?.trim().toLowerCase() || '';
+              const isUserAdmin = userEmail === ADMIN_EMAIL.toLowerCase() || currentUser?.role === 'admin';
+              if (!isUserAdmin) {
+                setIsAuthModalOpen(true);
+                showToast(`Inicia sesión como ${ADMIN_EMAIL} para activar el Modo Administrador`);
+                return;
+              }
+              setAppMode('admin');
+              showToast('Modo Administrador activado');
+            }}
+            onOpenAuthModal={() => setIsAuthModalOpen(true)}
+          />
         </div>
       )}
 
@@ -1392,6 +1478,18 @@ export default function App() {
               headerBgClass="bg-blue-50/40"
             >
               <div className="p-2 space-y-2">
+                {/* Mobile Direct Fullscreen Banner */}
+                {(isMobile || appMode === 'field') && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCanvasFullscreen(true)}
+                    className="w-full py-2.5 px-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-600 hover:from-emerald-500 hover:to-sky-500 text-white rounded-xl font-black text-xs flex items-center justify-center gap-2 shadow-md transition active:scale-[0.99] border border-emerald-400/40"
+                  >
+                    <Maximize2 className="w-4 h-4" />
+                    <span>⛶ TOCAR AQUÍ PARA VER PLANO EN PANTALLA COMPLETA DEL CELULAR</span>
+                  </button>
+                )}
+
                 <CanvasToolbar
                   currentTool={currentTool}
                   onSelectTool={setCurrentTool}
@@ -1442,37 +1540,91 @@ export default function App() {
                   }}
                   appMode={appMode}
                   onOpenAiRecognition={() => setIsAiModalOpen(true)}
+                  onToggleFullscreen={() => setIsCanvasFullscreen(f => !f)}
+                  isFullscreen={isCanvasFullscreen}
                 />
 
-                <BlueprintCanvas
-                  ref={canvasRef}
-                  blueprintImg={blueprintImg}
-                  currentTool={currentTool}
-                  strokes={strokes}
-                  elements={elements}
-                  areas={areas}
-                  zoomLevel={zoomLevel}
-                  onZoomChange={setZoomLevel}
-                  iconScale={iconScale}
-                  activeLayer={activeLayer}
-                  layerVisibility={layerVisibility}
-                  showCameraLabels={showCameraLabels}
-                  showLineLabels={showLineLabels}
-                  showAreaLabels={showAreaLabels}
-                  showSpecsLabels={showSpecsLabels}
-                  camPrefix={camPrefix}
-                  camCounter={camCounter}
-                  camDefaultType={camDefaultType}
-                  isLocked={globalConfig.lockBlueprintLayout}
-                  currentAreaPoints={currentAreaPoints}
-                  onAddAreaPoint={handleAddAreaPoint}
-                  onFinishArea={handleFinishArea}
-                  onAddStroke={handleAddStroke}
-                  onAddElement={handleAddElement}
-                  onUpdateElement={handleUpdateElement}
-                  onEraseAt={handleEraseAt}
-                  onInspectElement={setInspectedElement}
-                />
+                <div className="relative">
+                  <BlueprintCanvas
+                    ref={canvasRef}
+                    blueprintImg={blueprintImg}
+                    currentTool={currentTool}
+                    strokes={strokes}
+                    elements={elements}
+                    areas={areas}
+                    zoomLevel={zoomLevel}
+                    onZoomChange={setZoomLevel}
+                    iconScale={iconScale}
+                    className={(isMobile || appMode === 'field') ? 'w-full h-[62vh] min-h-[500px]' : undefined}
+                    activeLayer={activeLayer}
+                    layerVisibility={layerVisibility}
+                    showCameraLabels={showCameraLabels}
+                    showLineLabels={showLineLabels}
+                    showAreaLabels={showAreaLabels}
+                    showSpecsLabels={showSpecsLabels}
+                    camPrefix={camPrefix}
+                    camCounter={camCounter}
+                    camDefaultType={camDefaultType}
+                    isLocked={globalConfig.lockBlueprintLayout}
+                    selectedElementId={inspectedElement?.id ?? null}
+                    statusFilter={inspectorStatusFilter}
+                    currentAreaPoints={currentAreaPoints}
+                    onAddAreaPoint={handleAddAreaPoint}
+                    onFinishArea={handleFinishArea}
+                    onAddStroke={handleAddStroke}
+                    onAddElement={handleAddElement}
+                    onUpdateElement={handleUpdateElement}
+                    onEraseAt={handleEraseAt}
+                    onInspectElement={handleInspectElementOnPlano}
+                  />
+
+                  {/* Android / Field Inspector Quick Floating Actions */}
+                  {(isMobile || appMode === 'field') && (
+                    <div className="absolute top-3 right-3 flex flex-col gap-2 pointer-events-auto z-10">
+                      <button
+                        type="button"
+                        onClick={() => setIsCanvasFullscreen(true)}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white p-2.5 rounded-full font-black shadow-xl border-2 border-slate-900 flex items-center justify-center transition active:scale-95"
+                        title="Pantalla Completa"
+                      >
+                        <Maximize2 className="w-4 h-4" />
+                      </button>
+
+                      {appMode === 'admin' && (
+                        <button
+                          type="button"
+                          onClick={() => setIsQuickAddModalOpen(true)}
+                          className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 p-2.5 rounded-full font-black shadow-xl border-2 border-slate-900 flex items-center justify-center transition active:scale-95"
+                          title="Añadir Elemento Rápido"
+                        >
+                          <Plus className="w-5 h-5 stroke-[3]" />
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveLayer(l => l === 'civil' ? 'electrica' : 'civil')}
+                        className={`p-2.5 rounded-full font-black shadow-xl border-2 border-slate-900 flex items-center justify-center transition active:scale-95 text-xs ${
+                          activeLayer === 'civil' 
+                            ? 'bg-amber-400 text-slate-950' 
+                            : 'bg-cyan-400 text-slate-950'
+                        }`}
+                        title="Alternar Capa Activa"
+                      >
+                        {activeLayer === 'civil' ? '🏗️' : '⚡'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setZoomLevel(1.0)}
+                        className="bg-slate-900/90 hover:bg-slate-800 text-white p-2.5 rounded-full font-bold shadow-xl border border-slate-700 flex items-center justify-center transition active:scale-95"
+                        title="Centrar Zoom 100%"
+                      >
+                        <Crosshair className="w-4 h-4 text-sky-400" />
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </CollapsibleModule>
           </div>
@@ -1582,6 +1734,8 @@ export default function App() {
                 handleAddElement(newEl);
               }}
               onInspectElement={setInspectedElement}
+              selectedElementId={inspectedElement?.id ?? null}
+              onReturnToPlan={() => handleReturnToPlan(inspectedElement || undefined)}
               getAreaNameForElement={getAreaNameForElement}
               globalConfig={globalConfig}
               appMode={appMode}
@@ -1613,16 +1767,40 @@ export default function App() {
         onConfirm={confirmDeleteAction}
       />
 
-      {/* Telemetry Inspection Drawer */}
-      <TelemetryDrawer
-        element={inspectedElement}
-        onClose={() => setInspectedElement(null)}
-        onUpdateElement={handleUpdateElement}
-        onDeleteElement={handleDeleteElement}
-        areaName={inspectedElement ? getAreaNameForElement(inspectedElement) : ''}
-        scheduleItems={scheduleItems}
-        globalConfig={globalConfig}
-      />
+      {/* Mobile Touch-Optimized Inspector Bottom Sheet */}
+      {inspectedElement && (appMode === 'field' || isMobile) && !isFullTelemetryOpen && (
+        <MobileInspectorSheet
+          element={inspectedElement}
+          onClose={() => {
+            setInspectedElement(null);
+            setIsFullTelemetryOpen(false);
+          }}
+          onUpdateElement={handleUpdateElement}
+          onDeleteElement={appMode === 'admin' ? handleDeleteElement : undefined}
+          areaName={getAreaNameForElement(inspectedElement)}
+          allElements={elements}
+          onSelectElement={setInspectedElement}
+          onOpenFullTelemetry={() => setIsFullTelemetryOpen(true)}
+          showToast={showToast}
+          currentUser={currentUser}
+        />
+      )}
+
+      {/* Desktop / Full Technical Telemetry Inspection Drawer */}
+      {inspectedElement && ((appMode === 'admin' && !isMobile) || isFullTelemetryOpen) && (
+        <TelemetryDrawer
+          element={inspectedElement}
+          onClose={() => {
+            setInspectedElement(null);
+            setIsFullTelemetryOpen(false);
+          }}
+          onUpdateElement={handleUpdateElement}
+          onDeleteElement={appMode === 'admin' ? handleDeleteElement : undefined}
+          areaName={inspectedElement ? getAreaNameForElement(inspectedElement) : ''}
+          scheduleItems={scheduleItems}
+          globalConfig={globalConfig}
+        />
+      )}
 
       {/* Data Backup / Export Modal */}
       <DataBackupModal
@@ -1736,88 +1914,420 @@ export default function App() {
         showToast={showToast}
       />
 
-      {/* Mobile Bottom Navigation */}
-      {isMobile && (
-        <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex items-center justify-around p-1 z-[100] pb-[calc(env(safe-area-inset-bottom)+4px)] shadow-2xl no-print">
-          {appMode === 'field' ? (
-            <>
+      {/* Quick Add Element Modal for Field Inspectors & Mobile */}
+      <QuickAddModal
+        isOpen={isQuickAddModalOpen}
+        onClose={() => setIsQuickAddModalOpen(false)}
+        activeLayer={activeLayer}
+        elements={elements}
+        onAddElement={handleAddElement}
+        onInspectElement={setInspectedElement}
+        showToast={showToast}
+      />
+
+      {/* DWG FastView Style Top & Bottom Navigation Bar (Inspector / Field Mode) */}
+      {appMode === 'field' && (
+        <DWGFastViewBar
+          activeView={activeTab === 'planos' ? 'planos' : activeTab === 'bitacora' ? 'bitacora' : 'planos'}
+          onSelectView={(view) => {
+            if (view === 'planos') {
+              handleSelectMobileTab('planos');
+            } else if (view === 'bitacora') {
+              handleSelectMobileTab('bitacora');
+            } else if (view === 'medir') {
+              handleSelectMobileTab('planos');
+              setCurrentTool('straight');
+              showToast('Herramienta: Medir Tramo / Metrajes');
+            } else if (view === 'editar') {
+              if (inspectedElement) {
+                setIsFullTelemetryOpen(true);
+              } else {
+                handleSelectMobileTab('bitacora');
+                showToast('Selecciona un elemento para editarlo');
+              }
+            }
+          }}
+          activeLayer={activeLayer}
+          onChangeActiveLayer={(layer) => {
+            setActiveLayer(layer);
+            showToast(`Capa activa: ${layer === 'civil' ? '🏗️ Obras Civiles' : '⚡ Obras Eléctricas'}`);
+          }}
+          selectedElement={inspectedElement}
+          onOpenQuickEdit={() => {
+            if (inspectedElement) setIsFullTelemetryOpen(true);
+            else setIsQuickAddModalOpen(true);
+          }}
+          onUndo={() => {
+            if (strokes.length > 0) {
+              setStrokes(prev => prev.slice(0, prev.length - 1));
+              showToast('Último trazo deshecho');
+            }
+          }}
+          onRedo={() => {
+            showToast('Rehacer');
+          }}
+          onResetFitView={() => {
+            setZoomLevel(1.0);
+            if (canvasRef.current) canvasRef.current.resetView();
+            showToast('Plano centrado al 100%');
+          }}
+          onToggleFullscreen={() => setIsCanvasFullscreen(f => !f)}
+          isFullscreen={isCanvasFullscreen}
+          onOpenSearch={() => {
+            handleSelectMobileTab('bitacora');
+            showToast('Búsqueda rápida en Bitácora');
+          }}
+          onSaveCloud={handleManualCloudSync}
+          syncStatus={syncStatus}
+          onExitInspector={() => {
+            const userEmail = currentUser?.email?.trim().toLowerCase() || '';
+            const isUserAdmin = userEmail === ADMIN_EMAIL.toLowerCase() || currentUser?.role === 'admin';
+            if (!isUserAdmin) {
+              setIsAuthModalOpen(true);
+              showToast(`Inicia sesión como ${ADMIN_EMAIL} para activar el Modo Administrador`);
+              return;
+            }
+            setAppMode('admin');
+            showToast('Modo Administrador activado');
+          }}
+          onOpenDailyTracking={() => setIsDailyTrackingModalOpen(true)}
+          onExportPNG={() => {
+            if (canvasRef.current) canvasRef.current.exportAnnotatedBlueprintPNG(projectMeta);
+          }}
+          onOpenAiRecognition={() => setIsAiModalOpen(true)}
+          currentUser={currentUser}
+          projectMeta={projectMeta}
+        />
+      )}
+
+      {/* Admin Mobile Bottom Navigation */}
+      {isMobile && appMode === 'admin' && (
+        <div className="fixed bottom-0 left-0 right-0 bg-slate-950 border-t border-slate-800 flex items-center justify-around p-1.5 z-[100] pb-[calc(env(safe-area-inset-bottom)+6px)] shadow-2xl no-print">
+          <button
+            onClick={() => handleSelectMobileTab('dashboard')}
+            className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
+              activeTab === 'dashboard' && fieldMobileTab === 'both' ? 'text-blue-400 bg-blue-500/10 font-bold' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <LayoutGrid className="w-5 h-5 mb-0.5" />
+            <span className="text-[10px]">Panel</span>
+          </button>
+          <button
+            onClick={() => handleSelectMobileTab('planos')}
+            className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
+              activeTab === 'planos' || (fieldMobileTab === 'canvas' && activeTab !== 'dashboard') ? 'text-amber-400 bg-amber-500/10 font-bold' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <MapIcon className="w-5 h-5 mb-0.5" />
+            <span className="text-[10px]">Planos</span>
+          </button>
+          <button
+            onClick={() => setIsQuickAddModalOpen(true)}
+            className="flex flex-col items-center py-1 px-2.5 rounded-lg bg-emerald-600 text-white font-bold transition shadow"
+          >
+            <Plus className="w-5 h-5 mb-0.5 stroke-[3]" />
+            <span className="text-[10px]">+ Nuevo</span>
+          </button>
+          <button
+            onClick={() => handleSelectMobileTab('bitacora')}
+            className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
+              activeTab === 'bitacora' || (fieldMobileTab === 'bitacora' && activeTab !== 'dashboard') ? 'text-teal-400 bg-teal-500/10 font-bold' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <ClipboardList className="w-5 h-5 mb-0.5" />
+            <span className="text-[10px]">Bitácora</span>
+          </button>
+          <button
+            onClick={() => handleSelectMobileTab('sectores')}
+            className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
+              activeTab === 'sectores' ? 'text-sky-400 bg-sky-500/10 font-bold' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Building2 className="w-5 h-5 mb-0.5" />
+            <span className="text-[10px]">Sectores</span>
+          </button>
+        </div>
+      )}
+
+      {/* Fullscreen Dedicated Mobile Blueprint Overlay */}
+      {isCanvasFullscreen && (
+        <div className="fixed inset-0 z-[300] bg-slate-950 flex flex-col w-screen h-screen overflow-hidden select-none">
+          {/* Top Floating Control HUD */}
+          <div className="bg-slate-900/95 backdrop-blur-md border-b border-slate-800 p-2 flex items-center justify-between gap-2 shadow-2xl shrink-0 z-10">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <button
-                onClick={() => handleSelectMobileTab('planos')}
-                className={`flex flex-col items-center py-1 px-3 rounded-lg transition ${
-                  activeTab === 'planos' || fieldMobileTab === 'canvas' ? 'text-amber-400 bg-amber-500/10 font-bold' : 'text-slate-400 hover:text-white'
-                }`}
+                type="button"
+                onClick={() => setIsCanvasFullscreen(false)}
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-black text-xs flex items-center gap-1.5 shadow-md border border-rose-400 active:scale-95 transition"
+                title="Cerrar pantalla completa"
               >
-                <MapIcon className="w-5 h-5 mb-0.5" />
-                <span className="text-[10px]">📐 Plano</span>
+                <Minimize2 className="w-4 h-4" />
+                <span>Salir</span>
+              </button>
+
+              {/* Layer switch buttons */}
+              <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveLayer('civil');
+                    showToast('Capa: Obras Civiles');
+                  }}
+                  className={`py-1 px-2.5 rounded-md font-black text-xs flex items-center gap-1 transition ${
+                    activeLayer === 'civil'
+                      ? 'bg-amber-500 text-slate-950 shadow-sm font-black'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <HardHat className="w-3.5 h-3.5" />
+                  <span>Civiles</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveLayer('electrica');
+                    showToast('Capa: Obras Eléctricas');
+                  }}
+                  className={`py-1 px-2.5 rounded-md font-black text-xs flex items-center gap-1 transition ${
+                    activeLayer === 'electrica'
+                      ? 'bg-cyan-400 text-slate-950 shadow-sm font-black'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <MapIcon className="w-3.5 h-3.5" />
+                  <span>Eléctricas</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Icon Scale & Actions */}
+            <div className="flex items-center gap-1">
+              <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                <span className="text-[10px] font-bold text-slate-400 px-1.5 hidden sm:inline">Íconos:</span>
+                {[1.6, 2.2, 2.8, 3.5, 4.5].map((scale) => (
+                  <button
+                    key={scale}
+                    type="button"
+                    onClick={() => {
+                      setIconScale(scale);
+                      showToast(`Íconos ajustados a ${scale}x`);
+                    }}
+                    className={`px-1.5 py-1 rounded text-xs font-black transition ${
+                      iconScale === scale
+                        ? 'bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-300'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {scale}x
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setZoomLevel(1.0);
+                  if (canvasRef.current) canvasRef.current.resetView();
+                  showToast('Plano centrado 100%');
+                }}
+                className="p-2 bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700 shadow-sm active:scale-95 transition"
+                title="Centrar Plano"
+              >
+                <Crosshair className="w-4 h-4" />
+              </button>
+
+              {appMode === 'admin' && (
+                <button
+                  type="button"
+                  onClick={() => setIsQuickAddModalOpen(true)}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-black text-xs flex items-center gap-1 shadow-md border border-emerald-400 active:scale-95 transition"
+                >
+                  <Plus className="w-4 h-4 stroke-[3]" />
+                  <span className="hidden sm:inline">+ Elemento</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Fullscreen Blueprint Canvas Container */}
+          <div className="flex-1 w-full h-full relative bg-slate-950 overflow-hidden">
+            <BlueprintCanvas
+              ref={canvasRef}
+              blueprintImg={blueprintImg}
+              currentTool={currentTool}
+              strokes={strokes}
+              elements={elements}
+              areas={areas}
+              zoomLevel={zoomLevel}
+              onZoomChange={setZoomLevel}
+              iconScale={iconScale}
+              className="w-full h-full"
+              activeLayer={activeLayer}
+              layerVisibility={layerVisibility}
+              showCameraLabels={showCameraLabels}
+              showLineLabels={showLineLabels}
+              showAreaLabels={showAreaLabels}
+              showSpecsLabels={showSpecsLabels}
+              camPrefix={camPrefix}
+              camCounter={camCounter}
+              camDefaultType={camDefaultType}
+              isLocked={globalConfig.lockBlueprintLayout}
+              selectedElementId={inspectedElement?.id ?? null}
+              statusFilter={inspectorStatusFilter}
+              currentAreaPoints={currentAreaPoints}
+              onAddAreaPoint={handleAddAreaPoint}
+              onFinishArea={handleFinishArea}
+              onAddStroke={handleAddStroke}
+              onAddElement={handleAddElement}
+              onUpdateElement={handleUpdateElement}
+              onEraseAt={handleEraseAt}
+              onInspectElement={handleInspectElementOnPlano}
+            />
+
+            {/* Quick action buttons floating on the canvas */}
+            <div className="absolute top-3 right-3 flex flex-col gap-2 pointer-events-auto z-20">
+              <button
+                type="button"
+                onClick={() => setZoomLevel(z => Math.min(4.0, z * 1.25))}
+                className="bg-slate-900/90 hover:bg-slate-800 text-white w-10 h-10 rounded-full font-black text-lg shadow-xl border border-slate-700 flex items-center justify-center transition active:scale-95"
+                title="Acercar Zoom"
+              >
+                +
               </button>
               <button
-                onClick={() => handleSelectMobileTab('bitacora')}
-                className={`flex flex-col items-center py-1 px-3 rounded-lg transition ${
-                  activeTab === 'bitacora' || fieldMobileTab === 'bitacora' ? 'text-teal-400 bg-teal-500/10 font-bold' : 'text-slate-400 hover:text-white'
-                }`}
+                type="button"
+                onClick={() => setZoomLevel(z => Math.max(0.3, z * 0.8))}
+                className="bg-slate-900/90 hover:bg-slate-800 text-white w-10 h-10 rounded-full font-black text-lg shadow-xl border border-slate-700 flex items-center justify-center transition active:scale-95"
+                title="Alejar Zoom"
               >
-                <ClipboardList className="w-5 h-5 mb-0.5" />
-                <span className="text-[10px]">📝 Bitácora</span>
+                −
               </button>
               <button
-                onClick={() => handleSelectMobileTab('both')}
-                className={`flex flex-col items-center py-1 px-3 rounded-lg transition ${
-                  fieldMobileTab === 'both' ? 'text-sky-400 bg-sky-500/10 font-bold' : 'text-slate-400 hover:text-white'
-                }`}
+                type="button"
+                onClick={() => {
+                  if (canvasRef.current) canvasRef.current.exportAnnotatedBlueprintPNG(projectMeta);
+                }}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white w-10 h-10 rounded-full font-black shadow-xl border border-emerald-400 flex items-center justify-center transition active:scale-95"
+                title="Descargar Plano PNG"
               >
-                <LayoutGrid className="w-5 h-5 mb-0.5" />
-                <span className="text-[10px]">📱 Ambos</span>
+                📷
               </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => handleSelectMobileTab('dashboard')}
-                className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
-                  activeTab === 'dashboard' && fieldMobileTab === 'both' ? 'text-blue-400 bg-blue-500/10 font-bold' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <LayoutGrid className="w-5 h-5 mb-0.5" />
-                <span className="text-[10px]">Panel</span>
-              </button>
-              <button
-                onClick={() => handleSelectMobileTab('planos')}
-                className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
-                  activeTab === 'planos' || (fieldMobileTab === 'canvas' && activeTab !== 'dashboard') ? 'text-amber-400 bg-amber-500/10 font-bold' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <MapIcon className="w-5 h-5 mb-0.5" />
-                <span className="text-[10px]">Planos</span>
-              </button>
-              <button
-                onClick={() => handleSelectMobileTab('bitacora')}
-                className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
-                  activeTab === 'bitacora' || (fieldMobileTab === 'bitacora' && activeTab !== 'dashboard') ? 'text-teal-400 bg-teal-500/10 font-bold' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <ClipboardList className="w-5 h-5 mb-0.5" />
-                <span className="text-[10px]">Bitácora</span>
-              </button>
-              <button
-                onClick={() => handleSelectMobileTab('both')}
-                className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
-                  activeTab === 'dashboard' && fieldMobileTab === 'both' ? 'text-purple-400 bg-purple-500/10 font-bold' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <LayoutGrid className="w-5 h-5 mb-0.5" />
-                <span className="text-[10px]">Ambos</span>
-              </button>
-              <button
-                onClick={() => handleSelectMobileTab('sectores')}
-                className={`flex flex-col items-center py-1 px-2 rounded-lg transition ${
-                  activeTab === 'sectores' ? 'text-sky-400 bg-sky-500/10 font-bold' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Building2 className="w-5 h-5 mb-0.5" />
-                <span className="text-[10px]">Sectores</span>
-              </button>
-            </>
-          )}
+            </div>
+          </div>
+
+          {/* Fullscreen Bottom HUD Tools Bar */}
+          <div className="bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 pt-2 pb-[max(14px,env(safe-area-inset-bottom))] flex items-center justify-around gap-1.5 shadow-2xl shrink-0 z-10 min-h-[58px]">
+            <button
+              type="button"
+              onClick={() => {
+                setCurrentTool('pan');
+                showToast('Herramienta: Mover Plano / Seleccionar');
+              }}
+              className={`flex-1 py-1.5 px-1 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition ${
+                currentTool === 'pan' ? 'bg-amber-500 text-slate-950 shadow-md ring-1 ring-white font-black' : 'bg-slate-800/80 text-slate-300'
+              }`}
+            >
+              <Hand className="w-4 h-4" />
+              <span className="text-[10px]">Mover</span>
+            </button>
+
+            {appMode === 'admin' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentTool('straight');
+                    showToast('Herramienta: Trazar Tramo / Tubería');
+                  }}
+                  className={`flex-1 py-1.5 px-1 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition ${
+                    currentTool === 'straight' ? 'bg-sky-500 text-slate-950 shadow-md ring-1 ring-white font-black' : 'bg-slate-800/80 text-slate-300'
+                  }`}
+                >
+                  <Ruler className="w-4 h-4" />
+                  <span className="text-[10px]">Tramo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentTool('camera');
+                    showToast(`Herramienta: Insertar ${activeLayer === 'civil' ? 'Caja SB' : 'Punto Eléctrico'}`);
+                  }}
+                  className={`flex-1 py-1.5 px-1 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition ${
+                    currentTool === 'camera' ? 'bg-rose-500 text-white shadow-md ring-1 ring-white font-black' : 'bg-slate-800/80 text-slate-300'
+                  }`}
+                >
+                  <Boxes className="w-4 h-4" />
+                  <span className="text-[10px]">{activeLayer === 'civil' ? 'Caja SB' : 'Punto'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentTool('highlight');
+                    showToast('Herramienta: Resaltador');
+                  }}
+                  className={`flex-1 py-1.5 px-1 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition ${
+                    currentTool === 'highlight' ? 'bg-yellow-500 text-slate-950 shadow-md ring-1 ring-white font-black' : 'bg-slate-800/80 text-slate-300'
+                  }`}
+                >
+                  <Highlighter className="w-4 h-4" />
+                  <span className="text-[10px]">Resaltar</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentTool('eraser');
+                    showToast('Herramienta: Borrador');
+                  }}
+                  className={`flex-1 py-1.5 px-1 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition ${
+                    currentTool === 'eraser' ? 'bg-rose-600 text-white shadow-md ring-1 ring-white font-black' : 'bg-slate-800/80 text-slate-300'
+                  }`}
+                >
+                  <Eraser className="w-4 h-4" />
+                  <span className="text-[10px]">Borrar</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveLayer(l => l === 'civil' ? 'electrica' : 'civil');
+                    showToast(`Capa activa: ${activeLayer === 'civil' ? '⚡ Eléctricas' : '🏗️ Civiles'}`);
+                  }}
+                  className={`flex-1 py-1.5 px-1 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition ${
+                    activeLayer === 'civil' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                  }`}
+                >
+                  <Layers className="w-4 h-4" />
+                  <span className="text-[10px]">{activeLayer === 'civil' ? 'Civil' : 'Eléctrica'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setZoomLevel(1.0);
+                    if (canvasRef.current) canvasRef.current.resetView();
+                    showToast('Plano centrado 100%');
+                  }}
+                  className="flex-1 py-1.5 px-1 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 bg-slate-800/80 text-sky-300 transition"
+                >
+                  <Crosshair className="w-4 h-4" />
+                  <span className="text-[10px]">Centrar</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCanvasFullscreen(false);
+                    setActiveTab('bitacora');
+                    setFieldMobileTab('bitacora');
+                  }}
+                  className="flex-1 py-1.5 px-1 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 bg-teal-600/30 text-teal-300 border border-teal-500/40 transition"
+                >
+                  <ClipboardList className="w-4 h-4" />
+                  <span className="text-[10px]">Bitácora</span>
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

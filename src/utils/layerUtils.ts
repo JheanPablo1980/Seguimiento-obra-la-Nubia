@@ -43,14 +43,47 @@ export const LAYER_CONFIG: Record<ProjectLayer, {
 };
 
 export const ELECTRICAL_NODE_TYPES = [
-  { id: 'tablero', label: 'Tablero de Distribución / TD', prefix: 'TD-', icon: '⚡', defaultNorm: 'BT' },
-  { id: 'transformador', label: 'Transformador / Subestación', prefix: 'TR-', icon: '🔋', defaultNorm: 'MT' },
-  { id: 'camara_electrica', label: 'Cámara de Empalme Eléctrico', prefix: 'CE-', icon: '🔌', defaultNorm: 'BT' },
-  { id: 'caja_paso', label: 'Caja de Paso / Derivación', prefix: 'CP-', icon: '📦', defaultNorm: 'BT' },
-  { id: 'punto_fuerza', label: 'Punto de Fuerza / Carga', prefix: 'PF-', icon: '⚙️', defaultNorm: 'BT' },
-  { id: 'luminaria', label: 'Poste / Luminaria Alumbrado', prefix: 'LUM-', icon: '💡', defaultNorm: 'BT' },
-  { id: 'spt', label: 'Malla / Puesta a Tierra (SPT)', prefix: 'SPT-', icon: '⏚', defaultNorm: 'BT' }
+  { id: 'tablero', label: 'Tablero de Distribución / TD', prefix: 'TD-', icon: '⚡', defaultNorm: 'BT', color: '#38bdf8', category: 'distribucion' },
+  { id: 'transformador', label: 'Transformador / Subestación', prefix: 'TR-', icon: '🔋', defaultNorm: 'MT', color: '#f59e0b', category: 'transformacion' },
+  { id: 'barrajes_elastomericos', label: 'Barrajes Elastoméricos / Premoldeados', prefix: 'BE-', icon: '🪢', defaultNorm: 'MT', color: '#a855f7', category: 'empalme' },
+  { id: 'contador_electrico', label: 'Contador / Medidor Eléctrico', prefix: 'MED-', icon: '⏱️', defaultNorm: 'BT', color: '#10b981', category: 'medicion' },
+  { id: 'camara_electrica', label: 'Cámara de Empalme Eléctrico', prefix: 'CE-', icon: '🔌', defaultNorm: 'BT', color: '#06b6d4', category: 'empalme' },
+  { id: 'caja_paso', label: 'Caja de Paso / Derivación', prefix: 'CP-', icon: '📦', defaultNorm: 'BT', color: '#64748b', category: 'paso' },
+  { id: 'punto_fuerza', label: 'Punto de Fuerza / Carga', prefix: 'PF-', icon: '⚙️', defaultNorm: 'BT', color: '#ec4899', category: 'carga' },
+  { id: 'luminaria', label: 'Poste / Luminaria Alumbrado', prefix: 'LUM-', icon: '💡', defaultNorm: 'BT', color: '#eab308', category: 'alumbrado' },
+  { id: 'spt', label: 'Malla / Puesta a Tierra (SPT)', prefix: 'SPT-', icon: '⏚', defaultNorm: 'BT', color: '#22c55e', category: 'tierra' }
 ];
+
+export const getElectricalNodeMeta = (type?: string, label?: string) => {
+  const t = (type || '').toLowerCase();
+  const l = (label || '').toUpperCase();
+
+  if (t === 'transformador' || l.startsWith('TR')) {
+    return { id: 'transformador', label: 'Transformador', prefix: 'TR-', icon: '🔋', color: '#f59e0b', norm: 'MT' };
+  }
+  if (t === 'barrajes_elastomericos' || t === 'barraje' || t === 'barrajes' || l.startsWith('BE') || l.startsWith('BAR')) {
+    return { id: 'barrajes_elastomericos', label: 'Barrajes Elastoméricos', prefix: 'BE-', icon: '🪢', color: '#a855f7', norm: 'MT' };
+  }
+  if (t === 'contador_electrico' || t === 'contador' || t === 'medidor' || l.startsWith('MED') || l.startsWith('CNT')) {
+    return { id: 'contador_electrico', label: 'Contador Eléctrico', prefix: 'MED-', icon: '⏱️', color: '#10b981', norm: 'BT' };
+  }
+  if (t === 'tablero' || l.startsWith('TD')) {
+    return { id: 'tablero', label: 'Tablero Distribución', prefix: 'TD-', icon: '⚡', color: '#38bdf8', norm: 'BT' };
+  }
+  if (t === 'luminaria' || l.startsWith('LUM')) {
+    return { id: 'luminaria', label: 'Luminaria / Alumbrado', prefix: 'LUM-', icon: '💡', color: '#eab308', norm: 'BT' };
+  }
+  if (t === 'spt' || l.startsWith('SPT')) {
+    return { id: 'spt', label: 'Puesta a Tierra (SPT)', prefix: 'SPT-', icon: '⏚', color: '#22c55e', norm: 'BT' };
+  }
+  if (t === 'caja_paso' || l.startsWith('CP')) {
+    return { id: 'caja_paso', label: 'Caja de Paso', prefix: 'CP-', icon: '📦', color: '#64748b', norm: 'BT' };
+  }
+  if (t === 'punto_fuerza' || l.startsWith('PF')) {
+    return { id: 'punto_fuerza', label: 'Punto de Fuerza', prefix: 'PF-', icon: '⚙️', color: '#ec4899', norm: 'BT' };
+  }
+  return { id: 'camara_electrica', label: 'Cámara Eléctrica', prefix: 'CE-', icon: '🔌', color: '#06b6d4', norm: 'BT' };
+};
 
 export const ELECTRICAL_CABLE_PRESETS = [
   '3#250 kcmil Cu THHN + 1#250(N) + 1#2(T) / 480V',
