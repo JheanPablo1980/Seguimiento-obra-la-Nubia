@@ -39,6 +39,7 @@ interface BlueprintCanvasProps {
   appMode?: 'admin' | 'field';
   selectedElementId?: number | null;
   statusFilter?: 'all' | StatusType;
+  onPermissionDenied?: (message: string) => void;
   // Area drawing state
   currentAreaPoints: Point[];
   onAddAreaPoint: (point: Point) => void;
@@ -76,6 +77,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   appMode = 'admin',
   selectedElementId,
   statusFilter = 'all',
+  onPermissionDenied,
   currentAreaPoints,
   onAddAreaPoint,
   onFinishArea,
@@ -87,9 +89,20 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lastDeniedToastRef = useRef<number>(0);
 
   // Determine if element coordinate alterations and drawing modifications are allowed
   const isMovementAllowed = !isLocked && (canMoveElements ?? (appMode === 'admin'));
+
+  const notifyPermissionDenied = useCallback((customMsg?: string) => {
+    const now = Date.now();
+    if (now - lastDeniedToastRef.current > 2500) {
+      lastDeniedToastRef.current = now;
+      if (onPermissionDenied) {
+        onPermissionDenied(customMsg || 'El inspector no puede mover elementos del plano ya elaborados por el administrador');
+      }
+    }
+  }, [onPermissionDenied]);
 
   // Pan State
   const [panX, setPanX] = useState(0);
@@ -2144,7 +2157,10 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         return;
       } else {
         // Inspector Mode: Element cannot be moved by inspector.
-        // Convert gesture into smooth canvas panning so inspector navigates effortlessly.
+        // Notify inspector and convert gesture into smooth canvas panning so inspector navigates effortlessly.
+        if (drag.hasMoved) {
+          notifyPermissionDenied('El inspector no puede mover elementos del plano ya elaborados por el administrador');
+        }
         if (!isPanning) {
           setIsPanning(true);
           startPanRef.current = { x: pos.rawX - panX, y: pos.rawY - panY };

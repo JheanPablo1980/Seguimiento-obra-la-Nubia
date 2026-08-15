@@ -131,46 +131,46 @@ export const InspectorMobileBar: React.FC<InspectorMobileBarProps> = ({
       </div>
 
       {/* Row 2: Thumb-Friendly Layer Switcher + Fullscreen + Quick Actions */}
-      <div className="flex items-center justify-between gap-1.5 flex-wrap">
-        {/* Layer Selector */}
-        <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 flex-1 min-w-[170px]">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        {/* Layer Selector (Thumb-Friendly min 44px) */}
+        <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 flex-1 min-w-[200px] min-h-[44px]">
           <button
             type="button"
             onClick={() => onChangeActiveLayer('civil')}
-            className={`flex-1 py-1.5 px-2 rounded-md font-bold text-xs flex items-center justify-center gap-1.5 transition ${
+            className={`flex-1 min-h-[40px] py-2 px-3 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 transition active:scale-95 ${
               activeLayer === 'civil'
-                ? 'bg-amber-500 text-slate-950 shadow-sm font-black'
+                ? 'bg-amber-500 text-slate-950 shadow-md font-black ring-1 ring-amber-400'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            <HardHat className="w-3.5 h-3.5" />
+            <HardHat className="w-4 h-4 shrink-0" />
             <span>🏗️ Civiles</span>
           </button>
           <button
             type="button"
             onClick={() => onChangeActiveLayer('electrica')}
-            className={`flex-1 py-1.5 px-2 rounded-md font-bold text-xs flex items-center justify-center gap-1.5 transition ${
+            className={`flex-1 min-h-[40px] py-2 px-3 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 transition active:scale-95 ${
               activeLayer === 'electrica'
-                ? 'bg-cyan-400 text-slate-950 shadow-sm font-black'
+                ? 'bg-cyan-400 text-slate-950 shadow-md font-black ring-1 ring-cyan-300'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Zap className="w-3.5 h-3.5" />
+            <Zap className="w-4 h-4 shrink-0" />
             <span>⚡ Eléctricas</span>
           </button>
         </div>
 
         {/* Fullscreen & Quick Actions Buttons for Field Inspector */}
-        <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           {/* Prominent Fullscreen Toggle Button */}
           {onToggleFullscreen && (
             <button
               type="button"
               onClick={onToggleFullscreen}
-              className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 transition shadow-sm border ${
+              className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-sm border active:scale-95 ${
                 isFullscreen
                   ? 'bg-rose-600 hover:bg-rose-500 text-white border-rose-400'
-                  : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-300 animate-pulse'
+                  : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-300 shadow-md'
               }`}
               title={isFullscreen ? "Salir de Pantalla Completa" : "Ver plano en Pantalla Completa del celular"}
             >
@@ -184,17 +184,17 @@ export const InspectorMobileBar: React.FC<InspectorMobileBarProps> = ({
             <button
               type="button"
               onClick={cycleIconScale}
-              className="px-2 py-1.5 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-200 border border-indigo-500/50 rounded-lg text-xs font-bold flex items-center gap-1 transition"
+              className="min-h-[44px] px-3 py-2 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-200 border border-indigo-500/50 rounded-xl text-xs font-bold flex items-center gap-1.5 transition active:scale-95"
               title="Ajustar tamaño de íconos en el plano"
             >
-              <Layers className="w-3.5 h-3.5 text-indigo-400" />
+              <Layers className="w-4 h-4 text-indigo-400 shrink-0" />
               <span>Íconos {iconScale}x</span>
             </button>
           )}
 
           {/* Quick Photo Capture Button using Android camera */}
-          <label className="p-2 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition shadow-xs" title="Tomar foto con la cámara del celular">
-            <Camera className="w-4 h-4" />
+          <label className="min-w-[44px] min-h-[44px] px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition shadow-xs active:scale-95" title="Tomar foto con la cámara del celular">
+            <Camera className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Foto</span>
             <input
               type="file"
@@ -210,10 +210,10 @@ export const InspectorMobileBar: React.FC<InspectorMobileBarProps> = ({
           <button
             type="button"
             onClick={onOpenDailyTracking}
-            className="p-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-xs font-bold flex items-center gap-1 transition shadow-xs"
+            className="min-w-[44px] min-h-[44px] px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-xs active:scale-95"
             title="Seguimiento Diario de Obra"
           >
-            <Calendar className="w-4 h-4" />
+            <Calendar className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Diario</span>
           </button>
 
@@ -221,10 +221,10 @@ export const InspectorMobileBar: React.FC<InspectorMobileBarProps> = ({
           <button
             type="button"
             onClick={onExportPNG}
-            className="p-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition shadow-xs"
+            className="min-w-[44px] min-h-[44px] px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-xs active:scale-95"
             title="Guardar Plano Anotado en Imagen PNG"
           >
-            <Image className="w-4 h-4" />
+            <Image className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">PNG</span>
           </button>
 
@@ -232,10 +232,10 @@ export const InspectorMobileBar: React.FC<InspectorMobileBarProps> = ({
           <button
             type="button"
             onClick={onToggleAppMode}
-            className="p-2 bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 transition"
+            className="min-w-[44px] min-h-[44px] px-3 py-2 bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95"
             title="Cambiar a Vista de Administrador"
           >
-            <Shield className="w-4 h-4" />
+            <Shield className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Admin</span>
           </button>
         </div>

@@ -1094,69 +1094,80 @@ export default function App() {
         </div>
       )}
 
-      {/* Header - Only shown in Admin mode; Field/Inspector mode uses FieldInspectorHUD */}
-      {appMode === 'admin' && (
-        <Header syncStatus={syncStatus}
-          onFileUpload={handleFileUpload}
-          pdfDoc={pdfDoc}
-          currentPdfPage={currentPdfPage}
-          totalPdfPages={totalPdfPages}
-          onPrevPdfPage={handlePrevPdfPage}
-          onNextPdfPage={handleNextPdfPage}
-          onClearCanvas={() => {
-            setStrokes([]);
-            setCurrentAreaPoints([]);
-            showToast('Trazos y marcas del plano limpiados');
-          }}
-          onExportPDF={() => window.print()}
-          onOpenDataBackup={() => setIsBackupModalOpen(true)}
-          showCharts={showCharts}
-          onToggleCharts={() => setShowCharts(!showCharts)}
-          currentUser={currentUser}
-          onOpenAuthModal={() => setIsAuthModalOpen(true)}
-          onOpenDailyTrackingModal={() => setIsDailyTrackingModalOpen(true)}
-          appMode={appMode}
-          onOpenConfig={() => setIsConfigModalOpen(true)}
-          onOpenVersionHistory={() => setIsVersionHistoryModalOpen(true)}
-          onOpenScheduleProgress={(tab) => {
-            setScheduleInitialTab(tab || 'matrix');
-            setIsScheduleProgressModalOpen(true);
-          }}
-          onOpenMemoriaModal={(showImport) => {
-            setMemoriaInitialImport(!!showImport);
-            setIsMemoriaModalOpen(true);
-          }}
-          onOpenAiRecognition={() => setIsAiModalOpen(true)}
+      {/* Responsive Mobile-First Header with Hamburger Drawer and Desktop Navigation */}
+      <Header 
+        syncStatus={syncStatus}
+        onFileUpload={handleFileUpload}
+        pdfDoc={pdfDoc}
+        currentPdfPage={currentPdfPage}
+        totalPdfPages={totalPdfPages}
+        onPrevPdfPage={handlePrevPdfPage}
+        onNextPdfPage={handleNextPdfPage}
+        onClearCanvas={() => {
+          setStrokes([]);
+          setCurrentAreaPoints([]);
+          showToast('Trazos y marcas del plano limpiados');
+        }}
+        onExportPDF={() => window.print()}
+        onOpenDataBackup={() => setIsBackupModalOpen(true)}
+        showCharts={showCharts}
+        onToggleCharts={() => setShowCharts(!showCharts)}
+        currentUser={currentUser}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onOpenDailyTrackingModal={() => setIsDailyTrackingModalOpen(true)}
+        appMode={appMode}
+        onOpenConfig={() => setIsConfigModalOpen(true)}
+        onOpenVersionHistory={() => setIsVersionHistoryModalOpen(true)}
+        onOpenScheduleProgress={(tab) => {
+          setScheduleInitialTab(tab || 'matrix');
+          setIsScheduleProgressModalOpen(true);
+        }}
+        onOpenMemoriaModal={(showImport) => {
+          setMemoriaInitialImport(!!showImport);
+          setIsMemoriaModalOpen(true);
+        }}
+        onOpenAiRecognition={() => setIsAiModalOpen(true)}
+        activeTab={activeTab}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+          if (tab === 'planos') {
+            setCollapsedModules(prev => ({ ...prev, canvas: false }));
+          } else if (tab === 'bitacora') {
+            setCollapsedModules(prev => ({ ...prev, bitacora: false }));
+          } else if (tab === 'sectores') {
+            setCollapsedModules(prev => ({ ...prev, sectors: false, summaryTable: false }));
+          }
+        }}
+        activeLayer={activeLayer}
+        onChangeActiveLayer={setActiveLayer}
+        onToggleAppMode={() => {
+          const userEmail = currentUser?.email?.trim().toLowerCase() || '';
+          const isUserAdmin = userEmail === ADMIN_EMAIL.toLowerCase() || currentUser?.role === 'admin' ;
+          
+          if (appMode === 'field' && !isUserAdmin) {
+            setIsAuthModalOpen(true);
+            showToast(`Inicia sesión como ${ADMIN_EMAIL} para activar el Modo Administrador`);
+            return;
+          }
 
-          onToggleAppMode={() => {
-            const userEmail = currentUser?.email?.trim().toLowerCase() || '';
-            const isUserAdmin = userEmail === ADMIN_EMAIL.toLowerCase() || currentUser?.role === 'admin' ;
-            
-            if (appMode === 'field' && !isUserAdmin) {
-              setIsAuthModalOpen(true);
-              showToast(`Inicia sesión como ${ADMIN_EMAIL} para activar el Modo Administrador`);
-              return;
-            }
-
-            const nextMode = appMode === 'admin' ? 'field' : 'admin';
-            setAppMode(nextMode);
-            if (nextMode === 'field') {
-              setCurrentTool('pan');
-              setCollapsedModules(prev => ({ ...prev, canvas: false, bitacora: false }));
-              setFieldMobileTab('both');
-              showToast('Modo Inspección de Campo activado');
-            } else {
-              showToast('Modo Administrador activado (Edición y Configuración)');
-            }
-          }}
-          onExportAnnotatedBlueprintPNG={() => {
-            if (canvasRef.current) {
-              canvasRef.current.exportAnnotatedBlueprintPNG(projectMeta);
-              showToast('Plano anotado generado y descargado en PNG');
-            }
-          }}
-        />
-      )}
+          const nextMode = appMode === 'admin' ? 'field' : 'admin';
+          setAppMode(nextMode);
+          if (nextMode === 'field') {
+            setCurrentTool('pan');
+            setCollapsedModules(prev => ({ ...prev, canvas: false, bitacora: false }));
+            setFieldMobileTab('both');
+            showToast('Modo Inspección de Campo activado');
+          } else {
+            showToast('Modo Administrador activado (Edición y Configuración)');
+          }
+        }}
+        onExportAnnotatedBlueprintPNG={() => {
+          if (canvasRef.current) {
+            canvasRef.current.exportAnnotatedBlueprintPNG(projectMeta);
+            showToast('Plano anotado generado y descargado en PNG');
+          }
+        }}
+      />
 
       {/* Quick Modules Collapse/Expand Control Bar (Desktop Admin Only) */}
       {appMode === 'admin' && !isMobile && (
@@ -1572,6 +1583,7 @@ export default function App() {
                     appMode={appMode}
                     selectedElementId={inspectedElement?.id ?? null}
                     statusFilter={inspectorStatusFilter}
+                    onPermissionDenied={(msg) => showToast(msg)}
                     currentAreaPoints={currentAreaPoints}
                     onAddAreaPoint={handleAddAreaPoint}
                     onFinishArea={handleFinishArea}

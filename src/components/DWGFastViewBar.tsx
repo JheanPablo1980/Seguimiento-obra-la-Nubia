@@ -83,15 +83,16 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
   return (
     <>
       {/* Top Floating Toolbar (Estilo DWG FastView) */}
-      <div className="fixed top-2 left-2 right-2 sm:left-1/2 sm:-translate-x-1/2 sm:w-auto sm:max-w-xl z-[90] flex items-center justify-between gap-1.5 bg-black/90 backdrop-blur-md text-white px-2.5 py-1.5 rounded-full border border-slate-700/80 shadow-2xl no-print">
+      <div className="fixed top-2 left-2 right-2 sm:left-1/2 sm:-translate-x-1/2 sm:w-auto sm:max-w-xl z-[90] flex items-center justify-between gap-1.5 bg-black/90 backdrop-blur-md text-white px-3 py-2 rounded-2xl border border-slate-700/80 shadow-2xl no-print">
         {/* Left: Close / Exit Inspector */}
         <button
           type="button"
           onClick={onExitInspector}
-          className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 active:bg-rose-600 flex items-center justify-center text-slate-200 hover:text-white transition shrink-0"
+          className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-rose-600 flex items-center justify-center text-slate-200 hover:text-white transition shrink-0 shadow-sm"
           title="Salir del Modo Inspector (Ir a Administrador)"
+          aria-label="Salir a Administrador"
         >
-          <X className="w-4 h-4" />
+          <X className="w-5 h-5" />
         </button>
 
         {/* Center Actions: Save, Undo, Redo, Fit, Search, Fullscreen, Pending Filter */}
@@ -101,7 +102,7 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
             <button
               type="button"
               onClick={() => onChangeStatusFilter(statusFilter === 'Pendiente' ? 'all' : 'Pendiente')}
-              className={`px-2 py-1 rounded-full text-[10px] font-black transition flex items-center gap-1 border ${
+              className={`min-h-[44px] px-2.5 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1 border active:scale-95 ${
                 statusFilter === 'Pendiente'
                   ? 'bg-rose-600 text-white border-rose-400 shadow-md ring-1 ring-rose-400 animate-pulse'
                   : 'bg-slate-800/90 text-amber-300 border-amber-500/40 hover:bg-slate-700'
@@ -110,7 +111,7 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
             >
               <span>⚠️ Pendientes</span>
               {pendingCount > 0 && (
-                <span className="bg-black/60 px-1 py-0.2 rounded-full font-mono text-[9px]">
+                <span className="bg-black/60 px-1.5 py-0.5 rounded-full font-mono text-[10px]">
                   {pendingCount}
                 </span>
               )}
@@ -121,15 +122,16 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
           <button
             type="button"
             onClick={onSaveCloud}
-            className="p-1.5 rounded-full hover:bg-slate-800 text-slate-300 hover:text-emerald-400 transition shrink-0"
+            className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl hover:bg-slate-800 flex items-center justify-center text-slate-300 hover:text-emerald-400 transition shrink-0 active:scale-90"
             title="Guardar y Sincronizar en la Nube"
+            aria-label="Guardar en Nube"
           >
             {syncStatus === 'syncing' ? (
-              <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" />
+              <RefreshCw className="w-5 h-5 text-amber-400 animate-spin" />
             ) : syncStatus === 'synced' ? (
-              <Save className="w-4 h-4 text-emerald-400" />
+              <Save className="w-5 h-5 text-emerald-400" />
             ) : (
-              <Save className="w-4 h-4 text-slate-400" />
+              <Save className="w-5 h-5 text-slate-400" />
             )}
           </button>
 
@@ -137,52 +139,46 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
           <button
             type="button"
             onClick={onUndo}
-            className="p-1.5 rounded-full hover:bg-slate-800 text-slate-300 hover:text-white transition shrink-0"
+            className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl hover:bg-slate-800 flex items-center justify-center text-slate-300 hover:text-white transition shrink-0 active:scale-90"
             title="Deshacer"
+            aria-label="Deshacer"
           >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-
-          {/* Redo */}
-          <button
-            type="button"
-            onClick={onRedo}
-            className="p-1.5 rounded-full hover:bg-slate-800 text-slate-300 hover:text-white transition shrink-0"
-            title="Rehacer"
-          >
-            <RotateCw className="w-4 h-4" />
+            <RotateCcw className="w-5 h-5" />
           </button>
 
           {/* Fit View / Frame */}
           <button
             type="button"
             onClick={onResetFitView}
-            className="p-1.5 rounded-full hover:bg-slate-800 text-sky-400 hover:text-sky-300 transition shrink-0"
+            className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl hover:bg-slate-800 flex items-center justify-center text-sky-400 hover:text-sky-300 transition shrink-0 active:scale-90"
             title="Ajustar y Centrar Plano 100%"
+            aria-label="Centrar Plano"
           >
-            <Maximize className="w-4 h-4" />
+            <Maximize className="w-5 h-5" />
           </button>
 
           {/* Search */}
           <button
             type="button"
             onClick={onOpenSearch}
-            className="p-1.5 rounded-full hover:bg-slate-800 text-slate-300 hover:text-sky-300 transition shrink-0"
+            className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl hover:bg-slate-800 flex items-center justify-center text-slate-300 hover:text-sky-300 transition shrink-0 active:scale-90"
             title="Buscar Elemento en Plano"
+            aria-label="Buscar Elemento"
           >
-            <Search className="w-4 h-4" />
+            <Search className="w-5 h-5" />
           </button>
 
           {/* Fullscreen */}
           <button
             type="button"
             onClick={onToggleFullscreen}
-            className={`p-1.5 rounded-full transition shrink-0 ${
+            className={`min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl flex items-center justify-center transition shrink-0 active:scale-90 ${
               isFullscreen ? 'bg-rose-600/80 text-white' : 'hover:bg-slate-800 text-slate-300 hover:text-white'
             }`}
             title={isFullscreen ? "Salir de Pantalla Completa" : "Pantalla Completa CAD"}
+            aria-label="Pantalla Completa"
           >
-            {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+            {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
           </button>
 
           {/* More Actions Menu (...) */}
@@ -190,25 +186,26 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
             <button
               type="button"
               onClick={() => setIsMoreMenuOpen(prev => !prev)}
-              className={`p-1.5 rounded-full transition shrink-0 ${
+              className={`min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl flex items-center justify-center transition shrink-0 active:scale-90 ${
                 isMoreMenuOpen ? 'bg-slate-700 text-white' : 'hover:bg-slate-800 text-slate-300'
               }`}
               title="Más Herramientas"
+              aria-label="Más Opciones"
             >
-              <MoreHorizontal className="w-4 h-4" />
+              <MoreHorizontal className="w-5 h-5" />
             </button>
 
             {isMoreMenuOpen && (
-              <div className="absolute top-10 right-0 w-56 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 text-xs text-slate-200 z-[100] space-y-1">
+              <div className="absolute top-12 right-0 w-64 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-2 text-xs text-slate-200 z-[100] space-y-1.5">
                 <button
                   type="button"
                   onClick={() => {
                     setIsMoreMenuOpen(false);
                     if (onOpenDailyTracking) onOpenDailyTracking();
                   }}
-                  className="w-full text-left px-2.5 py-2 hover:bg-slate-800 rounded-lg flex items-center gap-2 font-bold transition"
+                  className="w-full min-h-[44px] text-left px-3 py-2.5 hover:bg-slate-800 rounded-xl flex items-center gap-2.5 font-bold transition active:scale-95"
                 >
-                  <Calendar className="w-4 h-4 text-amber-400" />
+                  <Calendar className="w-5 h-5 text-amber-400 shrink-0" />
                   <span>Bitácora Diaria de Obra</span>
                 </button>
                 <button
@@ -217,9 +214,9 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
                     setIsMoreMenuOpen(false);
                     if (onExportPNG) onExportPNG();
                   }}
-                  className="w-full text-left px-2.5 py-2 hover:bg-slate-800 rounded-lg flex items-center gap-2 font-bold transition"
+                  className="w-full min-h-[44px] text-left px-3 py-2.5 hover:bg-slate-800 rounded-xl flex items-center gap-2.5 font-bold transition active:scale-95"
                 >
-                  <ImageIcon className="w-4 h-4 text-emerald-400" />
+                  <ImageIcon className="w-5 h-5 text-emerald-400 shrink-0" />
                   <span>Exportar Plano PNG Anotado</span>
                 </button>
                 {onOpenAiRecognition && (
@@ -229,9 +226,9 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
                       setIsMoreMenuOpen(false);
                       onOpenAiRecognition();
                     }}
-                    className="w-full text-left px-2.5 py-2 hover:bg-slate-800 rounded-lg flex items-center gap-2 font-bold transition"
+                    className="w-full min-h-[44px] text-left px-3 py-2.5 hover:bg-slate-800 rounded-xl flex items-center gap-2.5 font-bold transition active:scale-95"
                   >
-                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    <Sparkles className="w-5 h-5 text-purple-400 shrink-0" />
                     <span>Reconocimiento IA de Plano</span>
                   </button>
                 )}
@@ -242,9 +239,9 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
                     setIsMoreMenuOpen(false);
                     if (onExitInspector) onExitInspector();
                   }}
-                  className="w-full text-left px-2.5 py-2 hover:bg-rose-950/60 text-rose-300 rounded-lg flex items-center gap-2 font-bold transition"
+                  className="w-full min-h-[44px] text-left px-3 py-2.5 hover:bg-rose-950/60 text-rose-300 rounded-xl flex items-center gap-2.5 font-bold transition active:scale-95"
                 >
-                  <Shield className="w-4 h-4 text-rose-400" />
+                  <Shield className="w-5 h-5 text-rose-400 shrink-0" />
                   <span>Modo Administrador</span>
                 </button>
               </div>
@@ -256,41 +253,42 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
         <button
           type="button"
           onClick={() => onSelectView('bitacora')}
-          className="w-8 h-8 rounded-lg bg-slate-800/90 hover:bg-sky-600 text-sky-400 hover:text-white flex flex-col items-center justify-center font-mono font-black text-[10px] leading-tight transition shrink-0 border border-slate-700"
+          className="min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl bg-slate-800/90 hover:bg-sky-600 text-sky-400 hover:text-white flex flex-col items-center justify-center font-mono font-black text-xs leading-tight transition shrink-0 border border-slate-700 shadow-sm active:scale-90"
           title="Ver Bitácora de Observaciones"
+          aria-label="Abrir Bitácora"
         >
-          <span className="font-extrabold text-xs">A≡</span>
+          <span className="font-extrabold text-sm">A≡</span>
         </button>
       </div>
 
-      {/* Bottom Navigation Toolbar (Estilo Menú Inferior DWG FastView) */}
-      <div className="fixed bottom-0 left-0 right-0 bg-slate-950/95 backdrop-blur-md border-t border-slate-800/90 z-[95] px-1 sm:px-2 pt-1.5 pb-[max(12px,env(safe-area-inset-bottom))] flex items-center justify-around text-white shadow-2xl no-print min-h-[58px]">
+      {/* Bottom Navigation Toolbar (Estilo Menú Inferior DWG FastView con 48px Touch Targets) */}
+      <div className="fixed bottom-0 left-0 right-0 bg-slate-950/95 backdrop-blur-md border-t border-slate-800/90 z-[95] px-1.5 sm:px-3 pt-1.5 pb-[max(12px,env(safe-area-inset-bottom))] flex items-center justify-around text-white shadow-2xl no-print min-h-[64px]">
         {/* 1. Plano (Canvas Interactivo) */}
         <button
           type="button"
           onClick={() => onSelectView('planos')}
-          className={`min-w-0 flex-1 py-1 px-1 flex flex-col items-center justify-center gap-0.5 rounded-xl transition active:scale-95 text-center ${
+          className={`min-w-0 min-h-[48px] flex-1 py-1.5 px-1 flex flex-col items-center justify-center gap-1 rounded-xl transition active:scale-95 text-center ${
             activeView === 'planos'
-              ? 'text-amber-400 bg-amber-500/15 font-bold'
+              ? 'text-amber-400 bg-amber-500/15 font-black'
               : 'text-slate-400 hover:text-white'
           }`}
         >
           <Pencil className="w-5 h-5 shrink-0" />
-          <span className="text-[10px] tracking-tight font-bold truncate max-w-full">Plano</span>
+          <span className="text-[11px] tracking-tight font-bold truncate max-w-full">Plano</span>
         </button>
 
         {/* 2. Bitácora (Control y Registro) */}
         <button
           type="button"
           onClick={() => onSelectView('bitacora')}
-          className={`min-w-0 flex-1 py-1 px-1 flex flex-col items-center justify-center gap-0.5 rounded-xl transition active:scale-95 text-center ${
+          className={`min-w-0 min-h-[48px] flex-1 py-1.5 px-1 flex flex-col items-center justify-center gap-1 rounded-xl transition active:scale-95 text-center ${
             activeView === 'bitacora'
-              ? 'text-teal-400 bg-teal-500/15 font-bold'
+              ? 'text-teal-400 bg-teal-500/15 font-black'
               : 'text-slate-400 hover:text-white'
           }`}
         >
           <ClipboardList className="w-5 h-5 shrink-0" />
-          <span className="text-[10px] tracking-tight font-bold truncate max-w-full">Bitácora</span>
+          <span className="text-[11px] tracking-tight font-bold truncate max-w-full">Bitácora</span>
         </button>
 
         {/* 3. Editar (Ficha rápida del elemento seleccionado) */}
@@ -300,19 +298,19 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
             if (onOpenQuickEdit) onOpenQuickEdit();
             else onSelectView('bitacora');
           }}
-          className={`min-w-0 flex-1 py-1 px-1 flex flex-col items-center justify-center gap-0.5 rounded-xl transition active:scale-95 text-center ${
+          className={`min-w-0 min-h-[48px] flex-1 py-1.5 px-1 flex flex-col items-center justify-center gap-1 rounded-xl transition active:scale-95 text-center ${
             activeView === 'editar' || selectedElement
-              ? 'text-sky-400 bg-sky-500/15 font-bold'
+              ? 'text-sky-400 bg-sky-500/15 font-black'
               : 'text-slate-400 hover:text-white'
           }`}
         >
           <div className="relative">
             <Edit3 className="w-5 h-5 shrink-0" />
             {selectedElement && (
-              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse ring-2 ring-slate-950"></span>
             )}
           </div>
-          <span className="text-[10px] tracking-tight font-bold truncate max-w-full">
+          <span className="text-[11px] tracking-tight font-bold truncate max-w-full">
             {selectedElement ? 'Editar' : 'Editar'}
           </span>
         </button>
@@ -321,7 +319,7 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
         <button
           type="button"
           onClick={() => onChangeActiveLayer(activeLayer === 'civil' ? 'electrica' : 'civil')}
-          className={`min-w-0 flex-1 py-1 px-1 flex flex-col items-center justify-center gap-0.5 rounded-xl transition active:scale-95 text-center ${
+          className={`min-w-0 min-h-[48px] flex-1 py-1.5 px-1 flex flex-col items-center justify-center gap-1 rounded-xl transition active:scale-95 text-center ${
             activeLayer === 'civil'
               ? 'text-amber-300 hover:bg-amber-500/10'
               : 'text-cyan-300 hover:bg-cyan-500/10'
@@ -329,11 +327,11 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
         >
           <div className="relative">
             <Layers className="w-5 h-5 shrink-0" />
-            <span className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
+            <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ring-2 ring-slate-950 ${
               activeLayer === 'civil' ? 'bg-amber-400' : 'bg-cyan-400'
             }`}></span>
           </div>
-          <span className="text-[10px] tracking-tight font-bold truncate max-w-full">
+          <span className="text-[11px] tracking-tight font-bold truncate max-w-full">
             {activeLayer === 'civil' ? 'Civil' : 'Eléctrica'}
           </span>
         </button>
@@ -342,14 +340,14 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
         <button
           type="button"
           onClick={() => onSelectView('medir')}
-          className={`min-w-0 flex-1 py-1 px-1 flex flex-col items-center justify-center gap-0.5 rounded-xl transition active:scale-95 text-center ${
+          className={`min-w-0 min-h-[48px] flex-1 py-1.5 px-1 flex flex-col items-center justify-center gap-1 rounded-xl transition active:scale-95 text-center ${
             activeView === 'medir'
-              ? 'text-emerald-400 bg-emerald-500/15 font-bold'
+              ? 'text-emerald-400 bg-emerald-500/15 font-black'
               : 'text-slate-400 hover:text-white'
           }`}
         >
           <Ruler className="w-5 h-5 shrink-0" />
-          <span className="text-[10px] tracking-tight font-bold truncate max-w-full">Medir</span>
+          <span className="text-[11px] tracking-tight font-bold truncate max-w-full">Medir</span>
         </button>
       </div>
     </>
