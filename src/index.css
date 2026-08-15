@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* Mobile Responsive Table */
 @media (max-width: 767px) {
