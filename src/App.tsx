@@ -51,8 +51,6 @@ import { MobileInspectorSheet } from './components/MobileInspectorSheet';
 import { DWGFastViewBar } from './components/DWGFastViewBar';
 import { normalizeLayer } from './utils/layerUtils';
 import { CollapsibleModule } from './components/CollapsibleModule';
-import { AIChatAssistant } from './components/AIChatAssistant';
-import { MessageSquarePlus } from 'lucide-react';
 
 import { 
   supabaseAuth, 
@@ -471,7 +469,6 @@ export default function App() {
 
   // AI Blueprint Recognition Modal State
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
-  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
 
   const handleImportAiElements = (newElements: InspectionElement[], summaryMsg: string) => {
     setElements(prev => [...prev, ...newElements]);
@@ -2355,23 +2352,6 @@ export default function App() {
           </div>
         </div>
       )}
-      {/* Floating Action Button for AI Assistant */}
-      {!isAiChatOpen && (
-        <button
-          onClick={() => setIsAiChatOpen(true)}
-          className="fixed bottom-24 right-4 sm:bottom-6 sm:right-6 w-14 h-14 bg-purple-600 hover:bg-purple-500 text-white rounded-full shadow-2xl flex items-center justify-center transition hover:scale-105 active:scale-95 z-50 group border border-purple-400"
-          aria-label="Abrir Asistente AI"
-        >
-          <MessageSquarePlus className="w-6 h-6 group-hover:scale-110 transition-transform" />
-          <span className="absolute -top-2 -right-2 bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-slate-900 animate-pulse">AI</span>
-        </button>
-      )}
-
-      {/* AI Chat Assistant (Sticky/Mobile-First) */}
-      <AIChatAssistant 
-        isOpen={isAiChatOpen} 
-        onClose={() => setIsAiChatOpen(false)} 
-      />
     </div>
   );
 }
