@@ -83,7 +83,7 @@ export const DWGFastViewBar: React.FC<DWGFastViewBarProps> = ({
   return (
     <>
       {/* Top Floating Toolbar (Estilo DWG FastView) */}
-      <div className="fixed top-2 left-2 right-2 sm:left-1/2 sm:-translate-x-1/2 sm:w-auto sm:max-w-xl z-[90] flex items-center justify-between gap-1.5 bg-black/90 backdrop-blur-md text-white px-3 py-2 rounded-2xl border border-slate-700/80 shadow-2xl no-print">
+      <div className="fixed top-24 left-2 right-2 sm:left-1/2 sm:-translate-x-1/2 sm:w-auto sm:max-w-xl z-[90] flex items-center justify-between gap-1.5 bg-black/90 backdrop-blur-md text-white px-3 py-2 rounded-2xl border border-slate-700/80 shadow-2xl no-print">
         {/* Left: Close / Exit Inspector */}
         <button
           type="button"
